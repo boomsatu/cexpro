@@ -1,0 +1,857 @@
+# Pod Security Standards
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cex-exchange
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cex-exchange-staging
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+# Security Context Constraints
+apiVersion: v1
+kind: SecurityContextConstraints
+metadata:
+  name: cex-restricted-scc
+  annotations:
+    kubernetes.io/description: "Restricted security context for CEX applications"
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegedContainer: false
+allowedCapabilities: []
+defaultAddCapabilities: []
+requiredDropCapabilities:
+- ALL
+allowedVolumeTypes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+fsGroup:
+  type: MustRunAs
+  ranges:
+  - min: 1000
+    max: 65535
+runAsUser:
+  type: MustRunAsNonRoot
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+  - min: 1000
+    max: 65535
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+---
+# RBAC Configuration
+# Service Accounts
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cex-backend-sa
+  namespace: cex-exchange
+  labels:
+    app: cex-backend
+    component: auth
+automountServiceAccountToken: true
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cex-frontend-sa
+  namespace: cex-exchange
+  labels:
+    app: cex-frontend
+    component: auth
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cex-admin-sa
+  namespace: cex-exchange
+  labels:
+    app: cex-admin
+    component: auth
+automountServiceAccountToken: true
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cex-database-sa
+  namespace: cex-exchange
+  labels:
+    component: database
+    app: database
+automountServiceAccountToken: false
+---
+# Roles and RoleBindings
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cex-backend-role
+  namespace: cex-exchange
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cex-backend-rolebinding
+  namespace: cex-exchange
+subjects:
+- kind: ServiceAccount
+  name: cex-backend-sa
+  namespace: cex-exchange
+roleRef:
+  kind: Role
+  name: cex-backend-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cex-admin-role
+  namespace: cex-exchange
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods", "services"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cex-admin-rolebinding
+  namespace: cex-exchange
+subjects:
+- kind: ServiceAccount
+  name: cex-admin-sa
+  namespace: cex-exchange
+roleRef:
+  kind: Role
+  name: cex-admin-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Network Policies for Enhanced Security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-default
+  namespace: cex-exchange
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: cex-exchange
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-frontend
+  namespace: cex-exchange
+spec:
+  podSelector:
+    matchLabels:
+      app: cex-frontend
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-backend
+  namespace: cex-exchange
+spec:
+  podSelector:
+    matchLabels:
+      app: cex-backend
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          app: cex-frontend
+    - podSelector:
+        matchLabels:
+          app: cex-admin
+    ports:
+    - protocol: TCP
+      port: 3001
+    - protocol: TCP
+      port: 3002
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-admin
+  namespace: cex-exchange
+spec:
+  podSelector:
+    matchLabels:
+      app: cex-admin
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-databases
+  namespace: cex-exchange
+spec:
+  podSelector:
+    matchLabels:
+      app: cex-backend
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to:
+    - podSelector:
+        matchLabels:
+          app: mongodb
+    ports:
+    - protocol: TCP
+      port: 27017
+  - to:
+    - podSelector:
+        matchLabels:
+          app: kafka
+    ports:
+    - protocol: TCP
+      port: 9092
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-admin-to-databases
+  namespace: cex-exchange
+spec:
+  podSelector:
+    matchLabels:
+      app: cex-admin
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring
+  namespace: cex-exchange
+spec:
+  podSelector:
+    matchLabels:
+      component: monitoring
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector: {}
+  egress:
+  - to:
+    - podSelector: {}
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+---
+# Pod Security Policy (Deprecated but included for compatibility)
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: cex-restricted-psp
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'runtime/default'
+    seccomp.security.alpha.kubernetes.io/defaultProfileName: 'runtime/default'
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - ALL
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  runAsUser:
+    rule: 'MustRunAsNonRoot'
+  supplementalGroups:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1000
+        max: 65535
+  fsGroup:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1000
+        max: 65535
+  readOnlyRootFilesystem: false
+---
+# Security Scanning with Falco
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-config
+  namespace: cex-exchange
+  labels:
+    app: falco
+    component: security
+data:
+  falco.yaml: |
+    rules_file:
+      - /etc/falco/falco_rules.yaml
+      - /etc/falco/falco_rules.local.yaml
+      - /etc/falco/k8s_audit_rules.yaml
+      - /etc/falco/rules.d
+    
+    time_format_iso_8601: true
+    json_output: true
+    json_include_output_property: true
+    
+    log_stderr: true
+    log_syslog: false
+    log_level: info
+    
+    priority: debug
+    
+    buffered_outputs: false
+    
+    syscall_event_drops:
+      actions:
+        - log
+        - alert
+      rate: 0.03333
+      max_burst: 1000
+    
+    outputs:
+      rate: 1
+      max_burst: 1000
+    
+    syslog_output:
+      enabled: false
+    
+    file_output:
+      enabled: false
+    
+    stdout_output:
+      enabled: true
+    
+    webserver:
+      enabled: true
+      listen_port: 8765
+      k8s_healthz_endpoint: /healthz
+      ssl_enabled: false
+    
+    program_output:
+      enabled: false
+    
+    http_output:
+      enabled: true
+      url: "http://cex-backend-service:3001/api/v1/security/alerts"
+      user_agent: "falcosecurity/falco"
+    
+    grpc:
+      enabled: false
+    
+    grpc_output:
+      enabled: false
+  
+  cex_rules.yaml: |
+    # Custom CEX Security Rules
+    
+    # Detect cryptocurrency wallet access
+    - rule: Cryptocurrency Wallet Access
+      desc: Detect access to cryptocurrency wallet files
+      condition: >
+        open_read and
+        (fd.name contains "wallet.dat" or
+         fd.name contains ".wallet" or
+         fd.name contains "keystore" or
+         fd.name contains "private_key")
+      output: >
+        Cryptocurrency wallet file accessed
+        (user=%user.name command=%proc.cmdline file=%fd.name container=%container.name)
+      priority: CRITICAL
+    
+    # Detect suspicious trading activity
+    - rule: High Frequency Trading Detection
+      desc: Detect potential high frequency trading abuse
+      condition: >
+        k8s_audit and
+        ka.verb=create and
+        ka.uri.path contains "/api/v1/orders" and
+        ka.response_code<400
+      output: >
+        High frequency order creation detected
+        (user=%ka.user.name verb=%ka.verb uri=%ka.uri.path response=%ka.response_code)
+      priority: WARNING
+    
+    # Detect database access anomalies
+    - rule: Unusual Database Access
+      desc: Detect unusual database access patterns
+      condition: >
+        spawned_process and
+        proc.name in (psql, mysql, mongo) and
+        not proc.pname in (cex-backend, cex-admin)
+      output: >
+        Unusual database access detected
+        (user=%user.name command=%proc.cmdline parent=%proc.pname container=%container.name)
+      priority: WARNING
+    
+    # Detect privilege escalation attempts
+    - rule: CEX Privilege Escalation
+      desc: Detect privilege escalation in CEX containers
+      condition: >
+        spawned_process and
+        container.name contains "cex" and
+        proc.name in (sudo, su, doas) and
+        not user.name=root
+      output: >
+        Privilege escalation attempt in CEX container
+        (user=%user.name command=%proc.cmdline container=%container.name)
+      priority: CRITICAL
+    
+    # Detect network anomalies
+    - rule: Suspicious Network Activity
+      desc: Detect suspicious network connections from CEX containers
+      condition: >
+        inbound_outbound and
+        container.name contains "cex" and
+        fd.net and
+        not fd.sip in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.1")
+      output: >
+        Suspicious external network connection from CEX container
+        (container=%container.name connection=%fd.name)
+      priority: WARNING
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: falco
+  namespace: cex-exchange
+  labels:
+    app: falco
+    component: security
+spec:
+  selector:
+    matchLabels:
+      app: falco
+  template:
+    metadata:
+      labels:
+        app: falco
+        component: security
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8765"
+    spec:
+      serviceAccountName: falco
+      hostNetwork: true
+      hostPID: true
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: falco
+        image: falcosecurity/falco-no-driver:0.35.1
+        args:
+          - /usr/bin/falco
+          - --cri=/run/containerd/containerd.sock
+          - --k8s-api=https://kubernetes.default.svc.cluster.local
+          - --k8s-api-cert=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          - --k8s-api-token=/var/run/secrets/kubernetes.io/serviceaccount/token
+        ports:
+        - containerPort: 8765
+          name: http
+        securityContext:
+          privileged: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        - name: falco-config
+          mountPath: /etc/falco/falco.yaml
+          subPath: falco.yaml
+        - name: falco-config
+          mountPath: /etc/falco/rules.d/cex_rules.yaml
+          subPath: cex_rules.yaml
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: boot
+          mountPath: /host/boot
+          readOnly: true
+        - name: lib-modules
+          mountPath: /host/lib/modules
+          readOnly: true
+        - name: usr
+          mountPath: /host/usr
+          readOnly: true
+        - name: etc
+          mountPath: /host/etc
+          readOnly: true
+        - name: dev
+          mountPath: /host/dev
+        - name: sys
+          mountPath: /host/sys
+          readOnly: true
+        - name: containerd-socket
+          mountPath: /run/containerd/containerd.sock
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8765
+          initialDelaySeconds: 60
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8765
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+      volumes:
+      - name: falco-config
+        configMap:
+          name: falco-config
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: boot
+        hostPath:
+          path: /boot
+      - name: lib-modules
+        hostPath:
+          path: /lib/modules
+      - name: usr
+        hostPath:
+          path: /usr
+      - name: etc
+        hostPath:
+          path: /etc
+      - name: dev
+        hostPath:
+          path: /dev
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: containerd-socket
+        hostPath:
+          path: /run/containerd/containerd.sock
+---
+# Falco ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: falco
+  namespace: cex-exchange
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: falco
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "namespaces", "pods", "replicationcontrollers", "replicasets", "services", "daemonsets", "deployments", "events", "configmaps"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["daemonsets", "deployments", "replicasets", "statefulsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["extensions"]
+  resources: ["daemonsets", "deployments", "replicasets"]
+  verbs: ["get", "list", "watch"]
+- nonResourceURLs: ["/healthz", "/healthz/*"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: falco
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: falco
+subjects:
+- kind: ServiceAccount
+  name: falco
+  namespace: cex-exchange
+---
+# OPA Gatekeeper Constraints
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: cexrequiredsecuritycontext
+spec:
+  crd:
+    spec:
+      names:
+        kind: CexRequiredSecurityContext
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            runAsNonRoot:
+              type: boolean
+            readOnlyRootFilesystem:
+              type: boolean
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package cexrequiredsecuritycontext
+        
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.securityContext.runAsNonRoot
+          msg := "Container must run as non-root user"
+        }
+        
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.securityContext.readOnlyRootFilesystem
+          msg := "Container must have read-only root filesystem"
+        }
+        
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          container.securityContext.allowPrivilegeEscalation
+          msg := "Container must not allow privilege escalation"
+        }
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: CexRequiredSecurityContext
+metadata:
+  name: cex-security-context
+spec:
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment"]
+    namespaces: ["cex-exchange", "cex-exchange-staging"]
+  parameters:
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+---
+# Image Security Scanning
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trivy-config
+  namespace: cex-exchange
+  labels:
+    app: trivy
+    component: security
+data:
+  trivy.yaml: |
+    format: json
+    severity: HIGH,CRITICAL
+    ignore-unfixed: true
+    exit-code: 1
+    
+    db:
+      repository: ghcr.io/aquasecurity/trivy-db
+    
+    vulnerability:
+      type: os,library
+    
+    secret:
+      config: /etc/trivy/secret.yaml
+  
+  secret.yaml: |
+    rules:
+      - id: private-key
+        category: AsymmetricPrivateKey
+        title: Asymmetric Private Key
+        severity: CRITICAL
+        regex: |-
+          -----BEGIN\s+(RSA\s+|DSA\s+|EC\s+)?PRIVATE\s+KEY-----
+      
+      - id: jwt-token
+        category: JWT
+        title: JWT Token
+        severity: HIGH
+        regex: |-
+          eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*
+      
+      - id: api-key
+        category: APIKey
+        title: API Key
+        severity: HIGH
+        regex: |-
+          (?i)(api[_-]?key|apikey)\s*[:=]\s*['"]?[a-z0-9]{20,}['"]?
+---
+# Security Monitoring Dashboard
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-dashboard
+  namespace: cex-exchange
+  labels:
+    app: security-dashboard
+    component: security
+data:
+  dashboard.json: |
+    {
+      "dashboard": {
+        "title": "CEX Security Dashboard",
+        "tags": ["security", "cex"],
+        "timezone": "UTC",
+        "panels": [
+          {
+            "title": "Security Alerts",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "increase(falco_events_total[1h])",
+                "legendFormat": "Security Events"
+              }
+            ]
+          },
+          {
+            "title": "Failed Login Attempts",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(cex_auth_failed_attempts_total[5m])",
+                "legendFormat": "Failed Logins/sec"
+              }
+            ]
+          },
+          {
+            "title": "Suspicious Trading Activity",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(cex_suspicious_trades_total[5m])",
+                "legendFormat": "Suspicious Trades/sec"
+              }
+            ]
+          },
+          {
+            "title": "Network Policy Violations",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "increase(kubernetes_network_policy_violations_total[1h])",
+                "legendFormat": "Policy Violations"
+              }
+            ]
+          }
+        ]
+      }
+    }

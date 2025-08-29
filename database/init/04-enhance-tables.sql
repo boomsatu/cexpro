@@ -1,0 +1,113 @@
+-- Database Enhancement Script
+-- Adds new fields to existing tables for better trading functionality
+
+\c cex_db;
+
+-- Add new enum types
+CREATE TYPE trading_level AS ENUM (
+    'BEGINNER',
+    'INTERMEDIATE', 
+    'ADVANCED',
+    'PROFESSIONAL'
+);
+
+CREATE TYPE order_source AS ENUM (
+    'WEB',
+    'API',
+    'MOBILE',
+    'ALGORITHM'
+);
+
+CREATE TYPE margin_type AS ENUM (
+    'ISOLATED',
+    'CROSS'
+);
+
+CREATE TYPE trade_type AS ENUM (
+    'SPOT',
+    'MARGIN',
+    'FUTURES'
+);
+
+CREATE TYPE liquidity_type AS ENUM (
+    'MAKER',
+    'TAKER'
+);
+
+-- Enhance trading_pairs table
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS tick_size DECIMAL(36,18) DEFAULT 0.00000001;
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS lot_size DECIMAL(36,18) DEFAULT 0.00000001;
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS max_price DECIMAL(36,18);
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS min_price DECIMAL(36,18);
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS price_filter JSONB;
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS market_hours JSONB;
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS maintenance_margin DECIMAL(10,6) DEFAULT 0.05;
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS initial_margin DECIMAL(10,6) DEFAULT 0.10;
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS max_leverage INTEGER DEFAULT 1;
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS trading_status VARCHAR(20) DEFAULT 'TRADING';
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS price_filter_min DECIMAL(36,18);
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS price_filter_max DECIMAL(36,18);
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS min_notional DECIMAL(36,18) DEFAULT 10;
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS max_notional DECIMAL(36,18);
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active';
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS trading_enabled BOOLEAN DEFAULT TRUE;
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS margin_trading_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE trading_pairs ADD COLUMN IF NOT EXISTS volume_24h DECIMAL(36,18) DEFAULT 0;
+
+-- Enhance audit_logs table
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS event_type VARCHAR(50);
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS occurred_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+-- Enhance orders table
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_source order_source DEFAULT 'WEB';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS leverage INTEGER DEFAULT 1;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS margin_type margin_type;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS reduce_only BOOLEAN DEFAULT FALSE;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS post_only BOOLEAN DEFAULT FALSE;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS iceberg_qty DECIMAL(36,18);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS working_time TIMESTAMP WITH TIME ZONE;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS self_trade_prevention VARCHAR(20) DEFAULT 'NONE';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS original_client_order_id VARCHAR(50);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS strategy_id VARCHAR(50);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS strategy_type VARCHAR(50);
+
+-- Enhance trades table
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS trade_type trade_type DEFAULT 'SPOT';
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS liquidity_type liquidity_type;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS commission_asset VARCHAR(20);
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS is_best_match BOOLEAN DEFAULT FALSE;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS trade_group_id UUID;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS settlement_currency VARCHAR(20);
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS buyer_commission_asset VARCHAR(20);
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS seller_commission_asset VARCHAR(20);
+
+-- Enhance users table
+ALTER TABLE users ADD COLUMN IF NOT EXISTS trading_level trading_level DEFAULT 'BEGINNER';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS api_trading_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS margin_trading_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS futures_trading_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS max_leverage INTEGER DEFAULT 1;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_withdrawal_limit DECIMAL(36,18);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS monthly_withdrawal_limit DECIMAL(36,18);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS vip_level INTEGER DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS maker_fee_discount DECIMAL(10,6) DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS taker_fee_discount DECIMAL(10,6) DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS spot_trading_enabled BOOLEAN DEFAULT TRUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS withdrawal_whitelist_enabled BOOLEAN DEFAULT FALSE;
+
+-- Enhance user_balances table
+ALTER TABLE user_balances ADD COLUMN IF NOT EXISTS margin_balance DECIMAL(36,18) DEFAULT 0;
+ALTER TABLE user_balances ADD COLUMN IF NOT EXISTS futures_balance DECIMAL(36,18) DEFAULT 0;
+ALTER TABLE user_balances ADD COLUMN IF NOT EXISTS earning_balance DECIMAL(36,18) DEFAULT 0;
+ALTER TABLE user_balances ADD COLUMN IF NOT EXISTS last_interest_calculation TIMESTAMP WITH TIME ZONE;
+
+-- Enhance transactions table
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS internal_transfer BOOLEAN DEFAULT FALSE;
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transfer_type VARCHAR(50);
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS source_wallet VARCHAR(50);
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS destination_wallet VARCHAR(50);
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS gas_fee DECIMAL(36,18) DEFAULT 0;
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS gas_price DECIMAL(36,18);
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS gas_limit INTEGER;
+
+COMMIT;

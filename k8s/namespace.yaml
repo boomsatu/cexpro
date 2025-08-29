@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cex-exchange
+  labels:
+    name: cex-exchange
+    environment: production
+    app: cex-exchange
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cex-exchange-staging
+  labels:
+    name: cex-exchange-staging
+    environment: staging
+    app: cex-exchange

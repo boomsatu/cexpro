@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Your Email - {{companyName}}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2563eb;
+            margin-bottom: 10px;
+        }
+        .title {
+            font-size: 24px;
+            color: #1f2937;
+            margin-bottom: 20px;
+        }
+        .content {
+            margin-bottom: 30px;
+        }
+        .greeting {
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+        .message {
+            font-size: 16px;
+            margin-bottom: 25px;
+            line-height: 1.7;
+        }
+        .button-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .verify-button {
+            display: inline-block;
+            background-color: #2563eb;
+            color: #ffffff;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        .verify-button:hover {
+            background-color: #1d4ed8;
+        }
+        .alternative-link {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8fafc;
+            border-radius: 6px;
+            border-left: 4px solid #2563eb;
+        }
+        .alternative-link p {
+            margin: 0;
+            font-size: 14px;
+            color: #64748b;
+        }
+        .alternative-link a {
+            color: #2563eb;
+            word-break: break-all;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            text-align: center;
+            font-size: 14px;
+            color: #6b7280;
+        }
+        .footer a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+        .security-notice {
+            margin-top: 30px;
+            padding: 15px;
+            background-color: #fef3c7;
+            border-radius: 6px;
+            border-left: 4px solid #f59e0b;
+        }
+        .security-notice p {
+            margin: 0;
+            font-size: 14px;
+            color: #92400e;
+        }
+        .expiry-info {
+            font-size: 14px;
+            color: #ef4444;
+            font-weight: 600;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">{{companyName}}</div>
+            <h1 class="title">Verify Your Email Address</h1>
+        </div>
+        
+        <div class="content">
+            <div class="greeting">
+                Hello {{firstName}},
+            </div>
+            
+            <div class="message">
+                <p>Welcome to {{companyName}}! We're excited to have you join our cryptocurrency exchange platform.</p>
+                
+                <p>To complete your registration and start trading, please verify your email address by clicking the button below:</p>
+            </div>
+            
+            <div class="button-container">
+                <a href="{{verificationUrl}}" class="verify-button">Verify Email Address</a>
+            </div>
+            
+            <div class="expiry-info">
+                ⏰ This verification link will expire in {{expiresIn}}
+            </div>
+            
+            <div class="alternative-link">
+                <p><strong>Can't click the button?</strong> Copy and paste this link into your browser:</p>
+                <p><a href="{{verificationUrl}}">{{verificationUrl}}</a></p>
+            </div>
+            
+            <div class="security-notice">
+                <p><strong>Security Notice:</strong> If you didn't create an account with {{companyName}}, please ignore this email. Your email address will not be added to our system.</p>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>This email was sent to verify the email address for username: <strong>{{username}}</strong></p>
+            <p>Need help? Contact our support team at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+            <p>&copy; {{year}} {{companyName}}. All rights reserved.</p>
+            <p><a href="{{baseUrl}}/privacy">Privacy Policy</a> | <a href="{{baseUrl}}/terms">Terms of Service</a></p>
+        </div>
+    </div>
+</body>
+</html>

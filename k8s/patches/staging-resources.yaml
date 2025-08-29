@@ -1,0 +1,207 @@
+# Staging resource patches untuk development dan testing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cex-backend
+spec:
+  template:
+    spec:
+      containers:
+      - name: backend
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+        env:
+        - name: NODE_OPTIONS
+          value: "--max-old-space-size=768"
+        - name: UV_THREADPOOL_SIZE
+          value: "4"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cex-frontend
+spec:
+  template:
+    spec:
+      containers:
+      - name: frontend
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cex-admin
+spec:
+  template:
+    spec:
+      containers:
+      - name: admin
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "300m"
+            memory: "512Mi"
+        env:
+        - name: PHP_MEMORY_LIMIT
+          value: "256M"
+        - name: PHP_MAX_EXECUTION_TIME
+          value: "60"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgresql
+spec:
+  template:
+    spec:
+      containers:
+      - name: postgresql
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+        env:
+        - name: POSTGRES_SHARED_BUFFERS
+          value: "128MB"
+        - name: POSTGRES_EFFECTIVE_CACHE_SIZE
+          value: "512MB"
+        - name: POSTGRES_WORK_MEM
+          value: "4MB"
+        - name: POSTGRES_MAINTENANCE_WORK_MEM
+          value: "64MB"
+        - name: POSTGRES_MAX_CONNECTIONS
+          value: "50"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+spec:
+  template:
+    spec:
+      containers:
+      - name: redis
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "200m"
+            memory: "512Mi"
+        env:
+        - name: REDIS_MAXMEMORY
+          value: "256mb"
+        - name: REDIS_MAXMEMORY_POLICY
+          value: "allkeys-lru"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+spec:
+  template:
+    spec:
+      containers:
+      - name: mongodb
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            cpu: "400m"
+            memory: "1Gi"
+        env:
+        - name: MONGO_CACHE_SIZE_GB
+          value: "0.5"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+spec:
+  template:
+    spec:
+      containers:
+      - name: prometheus
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "512Mi"
+          limits:
+            cpu: "300m"
+            memory: "1Gi"
+        args:
+        - --storage.tsdb.retention.time=7d
+        - --storage.tsdb.retention.size=5GB
+        - --query.max-concurrency=5
+        - --query.max-samples=10000000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+spec:
+  template:
+    spec:
+      containers:
+      - name: grafana
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "128Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: elasticsearch
+spec:
+  template:
+    spec:
+      containers:
+      - name: elasticsearch
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "1Gi"
+          limits:
+            cpu: "500m"
+            memory: "2Gi"
+        env:
+        - name: ES_JAVA_OPTS
+          value: "-Xms512m -Xmx1g"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana
+spec:
+  template:
+    spec:
+      containers:
+      - name: kibana
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "300m"
+            memory: "512Mi"

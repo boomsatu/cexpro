@@ -1,0 +1,385 @@
+# Storage Classes
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-ssd
+  namespace: cex-exchange
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp3
+  iops: "3000"
+  throughput: "125"
+  encrypted: "true"
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: standard-hdd
+  namespace: cex-exchange
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp2
+  encrypted: "true"
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+---
+# Persistent Volume Claims for Application Data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cex-uploads-pvc
+  namespace: cex-exchange
+  labels:
+    app: cex-backend
+    component: storage
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: standard-hdd
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cex-admin-uploads-pvc
+  namespace: cex-exchange
+  labels:
+    app: cex-admin
+    component: storage
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: standard-hdd
+  resources:
+    requests:
+      storage: 50Gi
+---
+# Persistent Volume Claims for Logs
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cex-logs-pvc
+  namespace: cex-exchange
+  labels:
+    app: cex-exchange
+    component: logging
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: standard-hdd
+  resources:
+    requests:
+      storage: 200Gi
+---
+# Persistent Volume Claims for Backups
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cex-backups-pvc
+  namespace: cex-exchange
+  labels:
+    app: cex-exchange
+    component: backup
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: standard-hdd
+  resources:
+    requests:
+      storage: 500Gi
+---
+# Persistent Volume Claims for Monitoring Data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-storage-pvc
+  namespace: cex-exchange
+  labels:
+    app: prometheus
+    component: monitoring
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-storage-pvc
+  namespace: cex-exchange
+  labels:
+    app: grafana
+    component: monitoring
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: standard-hdd
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: elasticsearch-storage-pvc
+  namespace: cex-exchange
+  labels:
+    app: elasticsearch
+    component: logging
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 200Gi
+---
+# Network Policies for Security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cex-backend-netpol
+  namespace: cex-exchange
+spec:
+  podSelector:
+    matchLabels:
+      app: cex-backend
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: nginx-ingress
+    - podSelector:
+        matchLabels:
+          app: cex-frontend
+    - podSelector:
+        matchLabels:
+          app: cex-admin
+    ports:
+    - protocol: TCP
+      port: 3001
+    - protocol: TCP
+      port: 3002
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to:
+    - podSelector:
+        matchLabels:
+          app: mongodb
+    ports:
+    - protocol: TCP
+      port: 27017
+  - to:
+    - podSelector:
+        matchLabels:
+          app: kafka
+    ports:
+    - protocol: TCP
+      port: 9092
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cex-database-netpol
+  namespace: cex-exchange
+spec:
+  podSelector:
+    matchLabels:
+      component: database
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: cex-backend
+    - podSelector:
+        matchLabels:
+          app: cex-admin
+    - podSelector:
+        matchLabels:
+          component: monitoring
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cex-frontend-netpol
+  namespace: cex-exchange
+spec:
+  podSelector:
+    matchLabels:
+      app: cex-frontend
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: nginx-ingress
+    ports:
+    - protocol: TCP
+      port: 3000
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: cex-backend
+    ports:
+    - protocol: TCP
+      port: 3001
+    - protocol: TCP
+      port: 3002
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cex-admin-netpol
+  namespace: cex-exchange
+spec:
+  podSelector:
+    matchLabels:
+      app: cex-admin
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: nginx-ingress
+    ports:
+    - protocol: TCP
+      port: 80
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: cex-backend
+    ports:
+    - protocol: TCP
+      port: 3001
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+---
+# Resource Quotas
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: cex-exchange-quota
+  namespace: cex-exchange
+spec:
+  hard:
+    requests.cpu: "20"
+    requests.memory: 40Gi
+    limits.cpu: "40"
+    limits.memory: 80Gi
+    persistentvolumeclaims: "20"
+    requests.storage: 2Ti
+    pods: "50"
+    services: "20"
+    secrets: "20"
+    configmaps: "20"
+---
+# Limit Ranges
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: cex-exchange-limits
+  namespace: cex-exchange
+spec:
+  limits:
+  - default:
+      cpu: "1"
+      memory: "2Gi"
+    defaultRequest:
+      cpu: "100m"
+      memory: "128Mi"
+    type: Container
+  - max:
+      cpu: "4"
+      memory: "8Gi"
+    min:
+      cpu: "50m"
+      memory: "64Mi"
+    type: Container
+  - max:
+      storage: 1Ti
+    min:
+      storage: 1Gi
+    type: PersistentVolumeClaim

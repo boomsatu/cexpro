@@ -1,0 +1,672 @@
+# Backup Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-config
+  namespace: cex-exchange
+  labels:
+    app: backup
+    component: backup
+data:
+  backup-script.sh: |
+    #!/bin/bash
+    set -e
+    
+    # Configuration
+    BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
+    BACKUP_DIR="/backups"
+    S3_BUCKET="cex-backups"
+    RETENTION_DAYS=30
+    
+    # Database credentials from environment
+    POSTGRES_HOST="${POSTGRES_HOST:-postgres}"
+    POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+    POSTGRES_USER="${POSTGRES_USER}"
+    POSTGRES_PASSWORD="${POSTGRES_PASSWORD}"
+    
+    REDIS_HOST="${REDIS_HOST:-redis}"
+    REDIS_PORT="${REDIS_PORT:-6379}"
+    REDIS_PASSWORD="${REDIS_PASSWORD}"
+    
+    MONGODB_HOST="${MONGODB_HOST:-mongodb}"
+    MONGODB_PORT="${MONGODB_PORT:-27017}"
+    MONGODB_USER="${MONGODB_USER}"
+    MONGODB_PASSWORD="${MONGODB_PASSWORD}"
+    
+    # Create backup directory
+    mkdir -p "$BACKUP_DIR/$BACKUP_DATE"
+    
+    echo "Starting backup process at $(date)"
+    
+    # PostgreSQL Backup
+    echo "Backing up PostgreSQL databases..."
+    export PGPASSWORD="$POSTGRES_PASSWORD"
+    
+    # Backup each database
+    for db in cex_trading cex_wallet cex_compliance cex_analytics; do
+        echo "Backing up database: $db"
+        pg_dump -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" \
+                -d "$db" --verbose --no-password --format=custom \
+                --file="$BACKUP_DIR/$BACKUP_DATE/postgres_${db}_${BACKUP_DATE}.dump"
+        
+        # Compress the backup
+        gzip "$BACKUP_DIR/$BACKUP_DATE/postgres_${db}_${BACKUP_DATE}.dump"
+    done
+    
+    # Global PostgreSQL backup (all databases)
+    echo "Creating global PostgreSQL backup..."
+    pg_dumpall -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" \
+               --verbose --no-password \
+               --file="$BACKUP_DIR/$BACKUP_DATE/postgres_global_${BACKUP_DATE}.sql"
+    gzip "$BACKUP_DIR/$BACKUP_DATE/postgres_global_${BACKUP_DATE}.sql"
+    
+    # Redis Backup
+    echo "Backing up Redis..."
+    redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" \
+              --rdb "$BACKUP_DIR/$BACKUP_DATE/redis_${BACKUP_DATE}.rdb"
+    gzip "$BACKUP_DIR/$BACKUP_DATE/redis_${BACKUP_DATE}.rdb"
+    
+    # MongoDB Backup
+    echo "Backing up MongoDB..."
+    mongodump --host "$MONGODB_HOST:$MONGODB_PORT" \
+              --username "$MONGODB_USER" --password "$MONGODB_PASSWORD" \
+              --authenticationDatabase admin \
+              --out "$BACKUP_DIR/$BACKUP_DATE/mongodb_${BACKUP_DATE}"
+    
+    # Compress MongoDB backup
+    tar -czf "$BACKUP_DIR/$BACKUP_DATE/mongodb_${BACKUP_DATE}.tar.gz" \
+        -C "$BACKUP_DIR/$BACKUP_DATE" "mongodb_${BACKUP_DATE}"
+    rm -rf "$BACKUP_DIR/$BACKUP_DATE/mongodb_${BACKUP_DATE}"
+    
+    # Application Data Backup
+    echo "Backing up application data..."
+    
+    # Backup uploaded files
+    if [ -d "/app-data/uploads" ]; then
+        tar -czf "$BACKUP_DIR/$BACKUP_DATE/uploads_${BACKUP_DATE}.tar.gz" \
+            -C "/app-data" uploads
+    fi
+    
+    # Backup configuration files
+    if [ -d "/app-data/config" ]; then
+        tar -czf "$BACKUP_DIR/$BACKUP_DATE/config_${BACKUP_DATE}.tar.gz" \
+            -C "/app-data" config
+    fi
+    
+    # Backup logs (last 7 days)
+    if [ -d "/app-data/logs" ]; then
+        find /app-data/logs -name "*.log" -mtime -7 | \
+        tar -czf "$BACKUP_DIR/$BACKUP_DATE/logs_${BACKUP_DATE}.tar.gz" -T -
+    fi
+    
+    # Create backup manifest
+    echo "Creating backup manifest..."
+    cat > "$BACKUP_DIR/$BACKUP_DATE/manifest.json" << EOF
+    {
+        "backup_date": "$BACKUP_DATE",
+        "timestamp": "$(date -Iseconds)",
+        "type": "full",
+        "databases": {
+            "postgresql": {
+                "databases": ["cex_trading", "cex_wallet", "cex_compliance", "cex_analytics"],
+                "global_backup": true
+            },
+            "redis": {
+                "backup_type": "rdb"
+            },
+            "mongodb": {
+                "backup_type": "mongodump"
+            }
+        },
+        "application_data": {
+            "uploads": $([ -f "$BACKUP_DIR/$BACKUP_DATE/uploads_${BACKUP_DATE}.tar.gz" ] && echo "true" || echo "false"),
+            "config": $([ -f "$BACKUP_DIR/$BACKUP_DATE/config_${BACKUP_DATE}.tar.gz" ] && echo "true" || echo "false"),
+            "logs": $([ -f "$BACKUP_DIR/$BACKUP_DATE/logs_${BACKUP_DATE}.tar.gz" ] && echo "true" || echo "false")
+        },
+        "files": [
+    $(ls -1 "$BACKUP_DIR/$BACKUP_DATE/" | grep -v manifest.json | sed 's/.*/        "&"/' | paste -sd, -)
+        ]
+    }
+    EOF
+    
+    # Calculate backup size
+    BACKUP_SIZE=$(du -sh "$BACKUP_DIR/$BACKUP_DATE" | cut -f1)
+    echo "Backup completed. Size: $BACKUP_SIZE"
+    
+    # Upload to S3 (if configured)
+    if [ -n "$AWS_ACCESS_KEY_ID" ] && [ -n "$AWS_SECRET_ACCESS_KEY" ]; then
+        echo "Uploading backup to S3..."
+        aws s3 sync "$BACKUP_DIR/$BACKUP_DATE/" "s3://$S3_BUCKET/$BACKUP_DATE/" \
+            --storage-class STANDARD_IA
+        
+        # Verify upload
+        if aws s3 ls "s3://$S3_BUCKET/$BACKUP_DATE/manifest.json" > /dev/null; then
+            echo "Backup successfully uploaded to S3"
+            
+            # Clean up local backup after successful upload
+            rm -rf "$BACKUP_DIR/$BACKUP_DATE"
+            echo "Local backup cleaned up"
+        else
+            echo "ERROR: Failed to upload backup to S3"
+            exit 1
+        fi
+    fi
+    
+    # Clean up old backups
+    echo "Cleaning up old backups..."
+    find "$BACKUP_DIR" -type d -name "*_*" -mtime +$RETENTION_DAYS -exec rm -rf {} + 2>/dev/null || true
+    
+    # Clean up old S3 backups
+    if [ -n "$AWS_ACCESS_KEY_ID" ] && [ -n "$AWS_SECRET_ACCESS_KEY" ]; then
+        CUTOFF_DATE=$(date -d "$RETENTION_DAYS days ago" +%Y%m%d)
+        aws s3 ls "s3://$S3_BUCKET/" | awk '{print $2}' | grep -E '^[0-9]{8}_[0-9]{6}/$' | \
+        while read backup_dir; do
+            backup_date=$(echo "$backup_dir" | cut -d'_' -f1)
+            if [ "$backup_date" -lt "$CUTOFF_DATE" ]; then
+                echo "Deleting old S3 backup: $backup_dir"
+                aws s3 rm "s3://$S3_BUCKET/$backup_dir" --recursive
+            fi
+        done
+    fi
+    
+    echo "Backup process completed at $(date)"
+  
+  restore-script.sh: |
+    #!/bin/bash
+    set -e
+    
+    # Configuration
+    BACKUP_DATE="$1"
+    BACKUP_DIR="/backups"
+    S3_BUCKET="cex-backups"
+    
+    if [ -z "$BACKUP_DATE" ]; then
+        echo "Usage: $0 <backup_date>"
+        echo "Example: $0 20231201_120000"
+        exit 1
+    fi
+    
+    # Database credentials from environment
+    POSTGRES_HOST="${POSTGRES_HOST:-postgres}"
+    POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+    POSTGRES_USER="${POSTGRES_USER}"
+    POSTGRES_PASSWORD="${POSTGRES_PASSWORD}"
+    
+    REDIS_HOST="${REDIS_HOST:-redis}"
+    REDIS_PORT="${REDIS_PORT:-6379}"
+    REDIS_PASSWORD="${REDIS_PASSWORD}"
+    
+    MONGODB_HOST="${MONGODB_HOST:-mongodb}"
+    MONGODB_PORT="${MONGODB_PORT:-27017}"
+    MONGODB_USER="${MONGODB_USER}"
+    MONGODB_PASSWORD="${MONGODB_PASSWORD}"
+    
+    echo "Starting restore process for backup: $BACKUP_DATE"
+    
+    # Download from S3 if not exists locally
+    if [ ! -d "$BACKUP_DIR/$BACKUP_DATE" ] && [ -n "$AWS_ACCESS_KEY_ID" ]; then
+        echo "Downloading backup from S3..."
+        mkdir -p "$BACKUP_DIR/$BACKUP_DATE"
+        aws s3 sync "s3://$S3_BUCKET/$BACKUP_DATE/" "$BACKUP_DIR/$BACKUP_DATE/"
+    fi
+    
+    if [ ! -d "$BACKUP_DIR/$BACKUP_DATE" ]; then
+        echo "ERROR: Backup directory not found: $BACKUP_DIR/$BACKUP_DATE"
+        exit 1
+    fi
+    
+    # Verify backup manifest
+    if [ ! -f "$BACKUP_DIR/$BACKUP_DATE/manifest.json" ]; then
+        echo "ERROR: Backup manifest not found"
+        exit 1
+    fi
+    
+    echo "Backup manifest found. Proceeding with restore..."
+    
+    # PostgreSQL Restore
+    echo "Restoring PostgreSQL databases..."
+    export PGPASSWORD="$POSTGRES_PASSWORD"
+    
+    # Restore each database
+    for db in cex_trading cex_wallet cex_compliance cex_analytics; do
+        backup_file="$BACKUP_DIR/$BACKUP_DATE/postgres_${db}_${BACKUP_DATE}.dump.gz"
+        if [ -f "$backup_file" ]; then
+            echo "Restoring database: $db"
+            
+            # Drop and recreate database
+            psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" \
+                 -d postgres -c "DROP DATABASE IF EXISTS $db;"
+            psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" \
+                 -d postgres -c "CREATE DATABASE $db;"
+            
+            # Restore from backup
+            gunzip -c "$backup_file" | \
+            pg_restore -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" \
+                       -d "$db" --verbose --no-password
+        else
+            echo "WARNING: Backup file not found for database: $db"
+        fi
+    done
+    
+    # Redis Restore
+    redis_backup="$BACKUP_DIR/$BACKUP_DATE/redis_${BACKUP_DATE}.rdb.gz"
+    if [ -f "$redis_backup" ]; then
+        echo "Restoring Redis..."
+        
+        # Stop Redis temporarily (if running in same pod)
+        redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" SHUTDOWN NOSAVE || true
+        
+        # Copy backup file
+        gunzip -c "$redis_backup" > /tmp/dump.rdb
+        
+        # Note: In production, you would need to copy this to Redis data directory
+        # and restart Redis service
+        echo "Redis backup extracted. Manual intervention required to complete restore."
+    fi
+    
+    # MongoDB Restore
+    mongodb_backup="$BACKUP_DIR/$BACKUP_DATE/mongodb_${BACKUP_DATE}.tar.gz"
+    if [ -f "$mongodb_backup" ]; then
+        echo "Restoring MongoDB..."
+        
+        # Extract backup
+        tar -xzf "$mongodb_backup" -C "/tmp/"
+        
+        # Restore using mongorestore
+        mongorestore --host "$MONGODB_HOST:$MONGODB_PORT" \
+                     --username "$MONGODB_USER" --password "$MONGODB_PASSWORD" \
+                     --authenticationDatabase admin \
+                     --drop "/tmp/mongodb_${BACKUP_DATE}"
+        
+        # Clean up
+        rm -rf "/tmp/mongodb_${BACKUP_DATE}"
+    fi
+    
+    # Application Data Restore
+    echo "Restoring application data..."
+    
+    # Restore uploads
+    uploads_backup="$BACKUP_DIR/$BACKUP_DATE/uploads_${BACKUP_DATE}.tar.gz"
+    if [ -f "$uploads_backup" ]; then
+        echo "Restoring uploads..."
+        mkdir -p /app-data
+        tar -xzf "$uploads_backup" -C /app-data
+    fi
+    
+    # Restore config
+    config_backup="$BACKUP_DIR/$BACKUP_DATE/config_${BACKUP_DATE}.tar.gz"
+    if [ -f "$config_backup" ]; then
+        echo "Restoring configuration..."
+        mkdir -p /app-data
+        tar -xzf "$config_backup" -C /app-data
+    fi
+    
+    echo "Restore process completed at $(date)"
+    echo "Please verify the restored data and restart services if necessary."
+---
+# Backup CronJob - Full Backup (Daily)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cex-full-backup
+  namespace: cex-exchange
+  labels:
+    app: backup
+    component: backup
+    type: full
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM UTC
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: backup
+            component: backup
+            type: full
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+          containers:
+          - name: backup
+            image: postgres:15-alpine
+            command: ["/bin/sh"]
+            args: ["/scripts/backup-script.sh"]
+            env:
+            - name: POSTGRES_HOST
+              value: "postgres"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: cex-secrets
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cex-secrets
+                  key: postgres-password
+            - name: REDIS_HOST
+              value: "redis"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cex-secrets
+                  key: redis-password
+            - name: MONGODB_HOST
+              value: "mongodb"
+            - name: MONGODB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: cex-secrets
+                  key: mongodb-user
+            - name: MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cex-secrets
+                  key: mongodb-password
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cex-secrets
+                  key: aws-access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: cex-secrets
+                  key: aws-secret-access-key
+            - name: AWS_DEFAULT_REGION
+              value: "us-east-1"
+            resources:
+              requests:
+                cpu: 500m
+                memory: 1Gi
+              limits:
+                cpu: 1
+                memory: 2Gi
+            volumeMounts:
+            - name: backup-scripts
+              mountPath: /scripts
+            - name: backup-storage
+              mountPath: /backups
+            - name: app-data
+              mountPath: /app-data
+              readOnly: true
+          volumes:
+          - name: backup-scripts
+            configMap:
+              name: backup-config
+              defaultMode: 0755
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: cex-backups-pvc
+          - name: app-data
+            persistentVolumeClaim:
+              claimName: cex-uploads-pvc
+---
+# Backup CronJob - Database Only (Every 6 hours)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cex-database-backup
+  namespace: cex-exchange
+  labels:
+    app: backup
+    component: backup
+    type: database
+spec:
+  schedule: "0 */6 * * *"  # Every 6 hours
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: backup
+            component: backup
+            type: database
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+          containers:
+          - name: database-backup
+            image: postgres:15-alpine
+            command: ["/bin/sh", "-c"]
+            args:
+            - |
+              # Quick database-only backup
+              BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
+              mkdir -p "/backups/db-only/$BACKUP_DATE"
+              
+              # PostgreSQL backup
+              export PGPASSWORD="$POSTGRES_PASSWORD"
+              for db in cex_trading cex_wallet cex_compliance cex_analytics; do
+                  pg_dump -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$db" \
+                          --format=custom --file="/backups/db-only/$BACKUP_DATE/${db}.dump"
+                  gzip "/backups/db-only/$BACKUP_DATE/${db}.dump"
+              done
+              
+              # Redis backup
+              redis-cli -h "$REDIS_HOST" -a "$REDIS_PASSWORD" \
+                        --rdb "/backups/db-only/$BACKUP_DATE/redis.rdb"
+              gzip "/backups/db-only/$BACKUP_DATE/redis.rdb"
+              
+              echo "Database backup completed: $BACKUP_DATE"
+            env:
+            - name: POSTGRES_HOST
+              value: "postgres"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: cex-secrets
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cex-secrets
+                  key: postgres-password
+            - name: REDIS_HOST
+              value: "redis"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cex-secrets
+                  key: redis-password
+            resources:
+              requests:
+                cpu: 200m
+                memory: 512Mi
+              limits:
+                cpu: 500m
+                memory: 1Gi
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: cex-backups-pvc
+---
+# Backup Restore Job Template
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cex-restore-job-template
+  namespace: cex-exchange
+  labels:
+    app: backup
+    component: restore
+spec:
+  template:
+    metadata:
+      labels:
+        app: backup
+        component: restore
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: restore
+        image: postgres:15-alpine
+        command: ["/bin/sh"]
+        args: ["/scripts/restore-script.sh", "$(BACKUP_DATE)"]
+        env:
+        - name: BACKUP_DATE
+          value: ""  # Set this when creating the job
+        - name: POSTGRES_HOST
+          value: "postgres"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: cex-secrets
+              key: postgres-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: cex-secrets
+              key: postgres-password
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: cex-secrets
+              key: redis-password
+        - name: MONGODB_HOST
+          value: "mongodb"
+        - name: MONGODB_USER
+          valueFrom:
+            secretKeyRef:
+              name: cex-secrets
+              key: mongodb-user
+        - name: MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: cex-secrets
+              key: mongodb-password
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: cex-secrets
+              key: aws-access-key-id
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cex-secrets
+              key: aws-secret-access-key
+        - name: AWS_DEFAULT_REGION
+          value: "us-east-1"
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 1
+            memory: 2Gi
+        volumeMounts:
+        - name: backup-scripts
+          mountPath: /scripts
+        - name: backup-storage
+          mountPath: /backups
+        - name: app-data
+          mountPath: /app-data
+      volumes:
+      - name: backup-scripts
+        configMap:
+          name: backup-config
+          defaultMode: 0755
+      - name: backup-storage
+        persistentVolumeClaim:
+          claimName: cex-backups-pvc
+      - name: app-data
+        persistentVolumeClaim:
+          claimName: cex-uploads-pvc
+---
+# Backup Monitoring Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: backup-monitor
+  namespace: cex-exchange
+  labels:
+    app: backup-monitor
+    component: backup
+spec:
+  selector:
+    app: backup-monitor
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backup-monitor
+  namespace: cex-exchange
+  labels:
+    app: backup-monitor
+    component: backup
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backup-monitor
+  template:
+    metadata:
+      labels:
+        app: backup-monitor
+        component: backup
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: backup-monitor
+        image: prom/node-exporter:v1.6.0
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: cex-secrets
+              key: aws-access-key-id
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cex-secrets
+              key: aws-secret-access-key
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        volumeMounts:
+        - name: backup-storage
+          mountPath: /backups
+          readOnly: true
+      volumes:
+      - name: backup-storage
+        persistentVolumeClaim:
+          claimName: cex-backups-pvc

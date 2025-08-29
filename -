@@ -1,0 +1,2 @@
+<h2>Minimal CodeIgniter Test</h2><p style='color: green;'>✓ System path resolved: C:\Users\mawan\OneDrive\Desktop\CexProject\admin-panel\vendor\codeigniter\framework\system/</p><p style='color: green;'>✓ CodeIgniter core file found</p><p style='color: red;'>✗ Fatal Error: Undefined constant "APPPATH"</p><pre>#0 C:\Users\mawan\OneDrive\Desktop\CexProject\admin-panel\test_minimal_ci.php(84): include_once()
+#1 {main}</pre><hr><p><a href='/'>Back to Admin Panel</a></p>

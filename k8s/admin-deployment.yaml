@@ -1,0 +1,512 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cex-admin
+  namespace: cex-exchange
+  labels:
+    app: cex-admin
+    component: admin-panel
+    version: v1
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: cex-admin
+  template:
+    metadata:
+      labels:
+        app: cex-admin
+        component: admin-panel
+        version: v1
+    spec:
+      imagePullSecrets:
+      - name: registry-credentials
+      containers:
+      - name: admin-panel
+        image: ghcr.io/your-org/cex-exchange-admin-panel:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+          name: http
+          protocol: TCP
+        env:
+        # ConfigMap environment variables
+        - name: CI_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: CI_ENVIRONMENT
+        - name: BASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: BASE_URL
+        - name: INDEX_PAGE
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: INDEX_PAGE
+        - name: URI_PROTOCOL
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: URI_PROTOCOL
+        - name: URL_SUFFIX
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: URL_SUFFIX
+        - name: LANGUAGE
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: LANGUAGE
+        - name: CHARSET
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: CHARSET
+        - name: ENABLE_HOOKS
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: ENABLE_HOOKS
+        - name: SUBCLASS_PREFIX
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: SUBCLASS_PREFIX
+        - name: COMPOSER_AUTOLOAD
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: COMPOSER_AUTOLOAD
+        - name: PERMITTED_URI_CHARS
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: PERMITTED_URI_CHARS
+        - name: ALLOW_GET_ARRAY
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: ALLOW_GET_ARRAY
+        - name: ENABLE_QUERY_STRINGS
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: ENABLE_QUERY_STRINGS
+        - name: CONTROLLER_TRIGGER
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: CONTROLLER_TRIGGER
+        - name: FUNCTION_TRIGGER
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: FUNCTION_TRIGGER
+        - name: DIRECTORY_TRIGGER
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: DIRECTORY_TRIGGER
+        - name: LOG_THRESHOLD
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: LOG_THRESHOLD
+        - name: LOG_DATE_FORMAT
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: LOG_DATE_FORMAT
+        - name: ERROR_VIEWS_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: ERROR_VIEWS_PATH
+        - name: CACHE_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: CACHE_PATH
+        - name: CACHE_DEFAULT_EXPIRES
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: CACHE_DEFAULT_EXPIRES
+        - name: SESS_DRIVER
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: SESS_DRIVER
+        - name: SESS_COOKIE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: SESS_COOKIE_NAME
+        - name: SESS_EXPIRATION
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: SESS_EXPIRATION
+        - name: SESS_SAVE_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: SESS_SAVE_PATH
+        - name: SESS_MATCH_IP
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: SESS_MATCH_IP
+        - name: SESS_TIME_TO_UPDATE
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: SESS_TIME_TO_UPDATE
+        - name: SESS_REGENERATE_DESTROY
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: SESS_REGENERATE_DESTROY
+        - name: COOKIE_PREFIX
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: COOKIE_PREFIX
+        - name: COOKIE_DOMAIN
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: COOKIE_DOMAIN
+        - name: COOKIE_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: COOKIE_PATH
+        - name: COOKIE_SECURE
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: COOKIE_SECURE
+        - name: COOKIE_HTTPONLY
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: COOKIE_HTTPONLY
+        - name: COOKIE_SAMESITE
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: COOKIE_SAMESITE
+        - name: STANDARDIZE_NEWLINES
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: STANDARDIZE_NEWLINES
+        - name: GLOBAL_XSS_FILTERING
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: GLOBAL_XSS_FILTERING
+        - name: CSRF_PROTECTION
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: CSRF_PROTECTION
+        - name: CSRF_TOKEN_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: CSRF_TOKEN_NAME
+        - name: CSRF_COOKIE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: CSRF_COOKIE_NAME
+        - name: CSRF_EXPIRE
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: CSRF_EXPIRE
+        - name: CSRF_REGENERATE
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: CSRF_REGENERATE
+        - name: CSRF_EXCLUDE_URIS
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: CSRF_EXCLUDE_URIS
+        - name: COMPRESS_OUTPUT
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: COMPRESS_OUTPUT
+        - name: TIME_REFERENCE
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: TIME_REFERENCE
+        - name: REWRITE_SHORT_TAGS
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: REWRITE_SHORT_TAGS
+        - name: PROXY_IPS
+          valueFrom:
+            configMapKeyRef:
+              name: cex-admin-config
+              key: PROXY_IPS
+        
+        # Secret environment variables
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: DATABASE_URL
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: REDIS_URL
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: ADMIN_SESSION_KEY
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: JWT_SECRET
+        - name: SENDGRID_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: SENDGRID_API_KEY
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_S3_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: AWS_S3_BUCKET
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: AWS_REGION
+        
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "800m"
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+        
+        volumeMounts:
+        - name: apache-config
+          mountPath: /etc/apache2/sites-available/000-default.conf
+          subPath: apache-config.conf
+          readOnly: true
+        - name: php-config
+          mountPath: /usr/local/etc/php/php.ini
+          subPath: php.ini
+          readOnly: true
+        - name: uploads
+          mountPath: /var/www/html/uploads
+        - name: logs
+          mountPath: /var/www/html/application/logs
+        - name: cache
+          mountPath: /var/www/html/application/cache
+        - name: sessions
+          mountPath: /var/www/html/application/sessions
+        - name: apache-logs
+          mountPath: /var/log/apache2
+        - name: php-logs
+          mountPath: /var/log/php
+        
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 33
+          runAsGroup: 33
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - NET_BIND_SERVICE
+      
+      volumes:
+      - name: apache-config
+        configMap:
+          name: apache-config
+          items:
+          - key: apache-config.conf
+            path: apache-config.conf
+      - name: php-config
+        configMap:
+          name: php-config
+          items:
+          - key: php.ini
+            path: php.ini
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: cex-admin-uploads-pvc
+      - name: logs
+        emptyDir: {}
+      - name: cache
+        emptyDir: {}
+      - name: sessions
+        emptyDir: {}
+      - name: apache-logs
+        emptyDir: {}
+      - name: php-logs
+        emptyDir: {}
+      
+      securityContext:
+        fsGroup: 33
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - cex-admin
+              topologyKey: kubernetes.io/hostname
+      
+      tolerations:
+      - key: "node.kubernetes.io/not-ready"
+        operator: "Exists"
+        effect: "NoExecute"
+        tolerationSeconds: 300
+      - key: "node.kubernetes.io/unreachable"
+        operator: "Exists"
+        effect: "NoExecute"
+        tolerationSeconds: 300
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cex-admin
+  namespace: cex-exchange
+  labels:
+    app: cex-admin
+    component: admin-panel
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  selector:
+    app: cex-admin
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cex-admin-pdb
+  namespace: cex-exchange
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: cex-admin
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: cex-admin-hpa
+  namespace: cex-exchange
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: cex-admin
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+      selectPolicy: Max

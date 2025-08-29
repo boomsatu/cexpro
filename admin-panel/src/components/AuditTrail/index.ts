@@ -1,0 +1,1 @@
+export { default as AuditTrail } from './AuditTrail';

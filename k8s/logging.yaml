@@ -1,0 +1,783 @@
+# Elasticsearch Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: elasticsearch-config
+  namespace: cex-exchange
+  labels:
+    app: elasticsearch
+    component: logging
+data:
+  elasticsearch.yml: |
+    cluster.name: cex-logging
+    node.name: ${HOSTNAME}
+    node.data: true
+    node.master: true
+    node.ingest: true
+    
+    path.data: /usr/share/elasticsearch/data
+    path.logs: /usr/share/elasticsearch/logs
+    
+    network.host: 0.0.0.0
+    http.port: 9200
+    transport.tcp.port: 9300
+    
+    discovery.type: single-node
+    
+    # Security settings
+    xpack.security.enabled: false
+    xpack.monitoring.collection.enabled: true
+    
+    # Performance settings
+    bootstrap.memory_lock: true
+    indices.memory.index_buffer_size: 30%
+    indices.memory.min_index_buffer_size: 96mb
+    
+    # Index settings
+    action.auto_create_index: true
+    action.destructive_requires_name: true
+    
+    # Logging
+    logger.level: INFO
+    
+  jvm.options: |
+    -Xms2g
+    -Xmx2g
+    -XX:+UseG1GC
+    -XX:G1HeapRegionSize=16m
+    -XX:+UseG1GC
+    -XX:+UnlockExperimentalVMOptions
+    -XX:+UseCGroupMemoryLimitForHeap
+    -Djava.awt.headless=true
+    -Dfile.encoding=UTF-8
+    -Djna.nosys=true
+    -Djdk.io.permissionsUseCanonicalPath=true
+    -Dio.netty.noUnsafe=true
+    -Dio.netty.noKeySetOptimization=true
+    -Dlog4j2.disable.jmx=true
+    -Dlog4j.shutdownHookEnabled=false
+    -Dlog4j2.formatMsgNoLookups=true
+---
+# Elasticsearch StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: elasticsearch
+  namespace: cex-exchange
+  labels:
+    app: elasticsearch
+    component: logging
+spec:
+  serviceName: elasticsearch
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elasticsearch
+  template:
+    metadata:
+      labels:
+        app: elasticsearch
+        component: logging
+    spec:
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+      - name: increase-vm-max-map
+        image: busybox:1.35
+        command: ['sysctl', '-w', 'vm.max_map_count=262144']
+        securityContext:
+          privileged: true
+      - name: increase-fd-ulimit
+        image: busybox:1.35
+        command: ['sh', '-c', 'ulimit -n 65536']
+        securityContext:
+          privileged: true
+      containers:
+      - name: elasticsearch
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
+        ports:
+        - containerPort: 9200
+          name: http
+        - containerPort: 9300
+          name: transport
+        env:
+        - name: ES_JAVA_OPTS
+          value: "-Xms2g -Xmx2g"
+        - name: discovery.type
+          value: single-node
+        - name: xpack.security.enabled
+          value: "false"
+        resources:
+          requests:
+            cpu: 1
+            memory: 3Gi
+          limits:
+            cpu: 2
+            memory: 4Gi
+        volumeMounts:
+        - name: elasticsearch-config
+          mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+          subPath: elasticsearch.yml
+        - name: elasticsearch-config
+          mountPath: /usr/share/elasticsearch/config/jvm.options
+          subPath: jvm.options
+        - name: elasticsearch-data
+          mountPath: /usr/share/elasticsearch/data
+        livenessProbe:
+          httpGet:
+            path: /_cluster/health
+            port: 9200
+          initialDelaySeconds: 60
+          timeoutSeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /_cluster/health?wait_for_status=yellow
+            port: 9200
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: elasticsearch-config
+        configMap:
+          name: elasticsearch-config
+  volumeClaimTemplates:
+  - metadata:
+      name: elasticsearch-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: fast-ssd
+      resources:
+        requests:
+          storage: 200Gi
+---
+# Elasticsearch Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch
+  namespace: cex-exchange
+  labels:
+    app: elasticsearch
+    component: logging
+spec:
+  selector:
+    app: elasticsearch
+  ports:
+  - name: http
+    port: 9200
+    targetPort: 9200
+  - name: transport
+    port: 9300
+    targetPort: 9300
+  type: ClusterIP
+---
+# Kibana Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kibana-config
+  namespace: cex-exchange
+  labels:
+    app: kibana
+    component: logging
+data:
+  kibana.yml: |
+    server.name: kibana
+    server.host: 0.0.0.0
+    server.port: 5601
+    
+    elasticsearch.hosts: ["http://elasticsearch:9200"]
+    
+    # Security
+    xpack.security.enabled: false
+    xpack.encryptedSavedObjects.encryptionKey: "cex-kibana-encryption-key-32-chars"
+    
+    # Monitoring
+    monitoring.ui.container.elasticsearch.enabled: true
+    
+    # Logging
+    logging.level: info
+    logging.appenders:
+      default:
+        type: console
+        layout:
+          type: json
+    
+    # Performance
+    server.maxPayloadBytes: 1048576
+    
+    # UI Settings
+    server.basePath: "/kibana"
+    server.rewriteBasePath: true
+---
+# Kibana Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana
+  namespace: cex-exchange
+  labels:
+    app: kibana
+    component: logging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+        component: logging
+    spec:
+      containers:
+      - name: kibana
+        image: docker.elastic.co/kibana/kibana:8.8.0
+        ports:
+        - containerPort: 5601
+          name: web
+        env:
+        - name: ELASTICSEARCH_HOSTS
+          value: "http://elasticsearch:9200"
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 1
+            memory: 2Gi
+        volumeMounts:
+        - name: kibana-config
+          mountPath: /usr/share/kibana/config/kibana.yml
+          subPath: kibana.yml
+        livenessProbe:
+          httpGet:
+            path: /api/status
+            port: 5601
+          initialDelaySeconds: 60
+          timeoutSeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /api/status
+            port: 5601
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: kibana-config
+        configMap:
+          name: kibana-config
+---
+# Kibana Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana
+  namespace: cex-exchange
+  labels:
+    app: kibana
+    component: logging
+spec:
+  selector:
+    app: kibana
+  ports:
+  - name: web
+    port: 5601
+    targetPort: 5601
+  type: ClusterIP
+---
+# Fluentd Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-config
+  namespace: cex-exchange
+  labels:
+    app: fluentd
+    component: logging
+data:
+  fluent.conf: |
+    @include systemd.conf
+    @include kubernetes.conf
+    @include cex-apps.conf
+    
+    <match **>
+      @type elasticsearch
+      @id out_es
+      @log_level info
+      include_tag_key true
+      host elasticsearch
+      port 9200
+      logstash_format true
+      logstash_prefix cex-logs
+      logstash_dateformat %Y.%m.%d
+      include_timestamp true
+      type_name _doc
+      
+      <buffer>
+        @type file
+        path /var/log/fluentd-buffers/kubernetes.system.buffer
+        flush_mode interval
+        retry_type exponential_backoff
+        flush_thread_count 2
+        flush_interval 5s
+        retry_forever
+        retry_max_interval 30
+        chunk_limit_size 2M
+        queue_limit_length 8
+        overflow_action block
+      </buffer>
+    </match>
+  
+  kubernetes.conf: |
+    <source>
+      @type tail
+      @id in_tail_container_logs
+      path /var/log/containers/*.log
+      pos_file /var/log/fluentd-containers.log.pos
+      tag kubernetes.*
+      read_from_head true
+      <parse>
+        @type json
+        time_format %Y-%m-%dT%H:%M:%S.%NZ
+      </parse>
+    </source>
+    
+    <filter kubernetes.**>
+      @type kubernetes_metadata
+      @id filter_kube_metadata
+      kubernetes_url "#{ENV['KUBERNETES_SERVICE_HOST']}:#{ENV['KUBERNETES_SERVICE_PORT_HTTPS']}"
+      verify_ssl "#{ENV['KUBERNETES_VERIFY_SSL'] || true}"
+      ca_file "#{ENV['KUBERNETES_CA_FILE']}"
+      skip_labels false
+      skip_container_metadata false
+      skip_master_url false
+      skip_namespace_metadata false
+    </filter>
+  
+  cex-apps.conf: |
+    # CEX Backend logs
+    <source>
+      @type tail
+      path /var/log/cex-backend/*.log
+      pos_file /var/log/fluentd-cex-backend.log.pos
+      tag cex.backend
+      <parse>
+        @type json
+        time_key timestamp
+        time_format %Y-%m-%dT%H:%M:%S.%LZ
+      </parse>
+    </source>
+    
+    # CEX Admin logs
+    <source>
+      @type tail
+      path /var/log/cex-admin/*.log
+      pos_file /var/log/fluentd-cex-admin.log.pos
+      tag cex.admin
+      <parse>
+        @type apache2
+        time_format %d/%b/%Y:%H:%M:%S %z
+      </parse>
+    </source>
+    
+    # Trading engine logs
+    <source>
+      @type tail
+      path /var/log/trading-engine/*.log
+      pos_file /var/log/fluentd-trading-engine.log.pos
+      tag cex.trading
+      <parse>
+        @type json
+        time_key timestamp
+        time_format %Y-%m-%dT%H:%M:%S.%LZ
+      </parse>
+    </source>
+    
+    # Security logs
+    <source>
+      @type tail
+      path /var/log/security/*.log
+      pos_file /var/log/fluentd-security.log.pos
+      tag cex.security
+      <parse>
+        @type json
+        time_key timestamp
+        time_format %Y-%m-%dT%H:%M:%S.%LZ
+      </parse>
+    </source>
+    
+    # Filter for sensitive data
+    <filter cex.**>
+      @type grep
+      <exclude>
+        key message
+        pattern /(password|secret|token|key|private)/i
+      </exclude>
+    </filter>
+    
+    # Add environment and service info
+    <filter cex.**>
+      @type record_transformer
+      <record>
+        environment production
+        cluster cex-exchange
+        service ${tag_parts[1]}
+      </record>
+    </filter>
+  
+  systemd.conf: |
+    <source>
+      @type systemd
+      @id in_systemd_kubelet
+      matches [{"_SYSTEMD_UNIT": "kubelet.service"}]
+      <storage>
+        @type local
+        persistent true
+        path /var/log/fluentd-journald-kubelet-cursor.json
+      </storage>
+      <entry>
+        fields_strip_underscores true
+      </entry>
+      tag kubelet
+    </source>
+    
+    <source>
+      @type systemd
+      @id in_systemd_docker
+      matches [{"_SYSTEMD_UNIT": "docker.service"}]
+      <storage>
+        @type local
+        persistent true
+        path /var/log/fluentd-journald-docker-cursor.json
+      </storage>
+      <entry>
+        fields_strip_underscores true
+      </entry>
+      tag docker
+    </source>
+---
+# Fluentd DaemonSet
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluentd
+  namespace: cex-exchange
+  labels:
+    app: fluentd
+    component: logging
+spec:
+  selector:
+    matchLabels:
+      app: fluentd
+  template:
+    metadata:
+      labels:
+        app: fluentd
+        component: logging
+    spec:
+      serviceAccountName: fluentd
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      - operator: "Exists"
+        effect: "NoExecute"
+      - operator: "Exists"
+        effect: "NoSchedule"
+      containers:
+      - name: fluentd
+        image: fluent/fluentd-kubernetes-daemonset:v1.16-debian-elasticsearch7-1
+        env:
+        - name: FLUENT_ELASTICSEARCH_HOST
+          value: "elasticsearch"
+        - name: FLUENT_ELASTICSEARCH_PORT
+          value: "9200"
+        - name: FLUENT_ELASTICSEARCH_SCHEME
+          value: "http"
+        - name: FLUENTD_SYSTEMD_CONF
+          value: disable
+        - name: FLUENT_CONTAINER_TAIL_EXCLUDE_PATH
+          value: /var/log/containers/fluent*
+        - name: FLUENT_CONTAINER_TAIL_PARSER_TYPE
+          value: /^(?<time>.+) (?<stream>stdout|stderr) [^ ]* (?<log>.*)$/
+        resources:
+          requests:
+            cpu: 100m
+            memory: 200Mi
+          limits:
+            cpu: 500m
+            memory: 500Mi
+        volumeMounts:
+        - name: fluentd-config
+          mountPath: /fluentd/etc/fluent.conf
+          subPath: fluent.conf
+        - name: fluentd-config
+          mountPath: /fluentd/etc/kubernetes.conf
+          subPath: kubernetes.conf
+        - name: fluentd-config
+          mountPath: /fluentd/etc/cex-apps.conf
+          subPath: cex-apps.conf
+        - name: fluentd-config
+          mountPath: /fluentd/etc/systemd.conf
+          subPath: systemd.conf
+        - name: varlog
+          mountPath: /var/log
+        - name: varlibdockercontainers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+        - name: journal
+          mountPath: /var/log/journal
+          readOnly: true
+        - name: systemd
+          mountPath: /etc/systemd
+          readOnly: true
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: fluentd-config
+        configMap:
+          name: fluentd-config
+      - name: varlog
+        hostPath:
+          path: /var/log
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+      - name: journal
+        hostPath:
+          path: /var/log/journal
+      - name: systemd
+        hostPath:
+          path: /etc/systemd
+---
+# Fluentd ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluentd
+  namespace: cex-exchange
+---
+# Fluentd ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fluentd
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+---
+# Fluentd ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fluentd
+roleRef:
+  kind: ClusterRole
+  name: fluentd
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: fluentd
+  namespace: cex-exchange
+---
+# Logstash Configuration (Optional - for advanced log processing)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logstash-config
+  namespace: cex-exchange
+  labels:
+    app: logstash
+    component: logging
+data:
+  logstash.yml: |
+    http.host: "0.0.0.0"
+    path.config: /usr/share/logstash/pipeline
+    xpack.monitoring.enabled: false
+  
+  logstash.conf: |
+    input {
+      beats {
+        port => 5044
+      }
+      
+      http {
+        port => 8080
+        codec => json
+      }
+    }
+    
+    filter {
+      # Parse CEX application logs
+      if [fields][service] == "cex-backend" {
+        json {
+          source => "message"
+        }
+        
+        # Extract trading data
+        if [event_type] == "trade" {
+          mutate {
+            add_tag => ["trade_event"]
+          }
+        }
+        
+        # Extract security events
+        if [event_type] == "security" {
+          mutate {
+            add_tag => ["security_event"]
+          }
+        }
+      }
+      
+      # Parse admin panel logs
+      if [fields][service] == "cex-admin" {
+        grok {
+          match => { "message" => "%{COMBINEDAPACHELOG}" }
+        }
+        
+        date {
+          match => [ "timestamp", "dd/MMM/yyyy:HH:mm:ss Z" ]
+        }
+      }
+      
+      # Add geolocation for IP addresses
+      if [client_ip] {
+        geoip {
+          source => "client_ip"
+          target => "geoip"
+        }
+      }
+      
+      # Remove sensitive fields
+      mutate {
+        remove_field => ["password", "secret", "token", "private_key"]
+      }
+    }
+    
+    output {
+      elasticsearch {
+        hosts => ["elasticsearch:9200"]
+        index => "cex-logs-%{+YYYY.MM.dd}"
+      }
+      
+      # Send critical alerts to webhook
+      if "security_event" in [tags] or "critical" in [tags] {
+        http {
+          url => "http://cex-backend-service:3001/api/v1/alerts/webhook"
+          http_method => "post"
+          format => "json"
+        }
+      }
+    }
+---
+# Curator for log retention (cleanup old indices)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: elasticsearch-curator
+  namespace: cex-exchange
+  labels:
+    app: elasticsearch-curator
+    component: logging
+spec:
+  schedule: "0 2 * * *"  # Run daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: curator
+            image: untergeek/curator:8.0.4
+            args:
+            - --config
+            - /etc/curator/config.yml
+            - /etc/curator/actions.yml
+            volumeMounts:
+            - name: curator-config
+              mountPath: /etc/curator
+          volumes:
+          - name: curator-config
+            configMap:
+              name: curator-config
+          restartPolicy: OnFailure
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: curator-config
+  namespace: cex-exchange
+  labels:
+    app: elasticsearch-curator
+    component: logging
+data:
+  config.yml: |
+    client:
+      hosts:
+        - elasticsearch
+      port: 9200
+      url_prefix:
+      use_ssl: False
+      certificate:
+      client_cert:
+      client_key:
+      ssl_no_validate: False
+      http_auth:
+      timeout: 30
+      master_only: False
+    
+    logging:
+      loglevel: INFO
+      logfile:
+      logformat: default
+      blacklist: ['elasticsearch', 'urllib3']
+  
+  actions.yml: |
+    actions:
+      1:
+        action: delete_indices
+        description: "Delete indices older than 30 days"
+        options:
+          ignore_empty_list: True
+          timeout_override:
+          continue_if_exception: False
+          disable_action: False
+        filters:
+        - filtertype: pattern
+          kind: prefix
+          value: cex-logs-
+          exclude:
+        - filtertype: age
+          source: name
+          direction: older
+          timestring: '%Y.%m.%d'
+          unit: days
+          unit_count: 30
+          exclude:
+      2:
+        action: delete_indices
+        description: "Delete indices older than 7 days for debug logs"
+        options:
+          ignore_empty_list: True
+          timeout_override:
+          continue_if_exception: False
+          disable_action: False
+        filters:
+        - filtertype: pattern
+          kind: prefix
+          value: debug-
+          exclude:
+        - filtertype: age
+          source: name
+          direction: older
+          timestring: '%Y.%m.%d'
+          unit: days
+          unit_count: 7
+          exclude:

@@ -1,0 +1,546 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cex-backend
+  namespace: cex-exchange
+  labels:
+    app: cex-backend
+    component: backend
+    version: v1
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: cex-backend
+  template:
+    metadata:
+      labels:
+        app: cex-backend
+        component: backend
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: cex-backend-sa
+      imagePullSecrets:
+      - name: registry-credentials
+      containers:
+      - name: backend
+        image: ghcr.io/your-org/cex-exchange-backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3001
+          name: http
+          protocol: TCP
+        - containerPort: 3002
+          name: websocket
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        env:
+        # ConfigMap environment variables
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: NODE_ENV
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: PORT
+        - name: API_VERSION
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: API_VERSION
+        - name: CORS_ORIGIN
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: CORS_ORIGIN
+        - name: RATE_LIMIT_WINDOW_MS
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: RATE_LIMIT_WINDOW_MS
+        - name: RATE_LIMIT_MAX_REQUESTS
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: RATE_LIMIT_MAX_REQUESTS
+        - name: SESSION_TIMEOUT
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: SESSION_TIMEOUT
+        - name: MAX_LOGIN_ATTEMPTS
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: MAX_LOGIN_ATTEMPTS
+        - name: LOCKOUT_DURATION
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: LOCKOUT_DURATION
+        - name: PASSWORD_MIN_LENGTH
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: PASSWORD_MIN_LENGTH
+        - name: EMAIL_VERIFICATION_REQUIRED
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: EMAIL_VERIFICATION_REQUIRED
+        - name: TWO_FACTOR_REQUIRED
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: TWO_FACTOR_REQUIRED
+        - name: KYC_REQUIRED
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: KYC_REQUIRED
+        - name: TRADING_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: TRADING_ENABLED
+        - name: DEPOSITS_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: DEPOSITS_ENABLED
+        - name: WITHDRAWALS_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: WITHDRAWALS_ENABLED
+        - name: MAINTENANCE_MODE
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: MAINTENANCE_MODE
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: LOG_LEVEL
+        - name: WEBSOCKET_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: WEBSOCKET_PORT
+        - name: WEBSOCKET_MAX_CONNECTIONS
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: WEBSOCKET_MAX_CONNECTIONS
+        - name: CACHE_TTL
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: CACHE_TTL
+        - name: FILE_UPLOAD_MAX_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: FILE_UPLOAD_MAX_SIZE
+        - name: BACKUP_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: BACKUP_ENABLED
+        - name: BACKUP_SCHEDULE
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: BACKUP_SCHEDULE
+        - name: MONITORING_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: MONITORING_ENABLED
+        - name: METRICS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: METRICS_PORT
+        - name: HEALTH_CHECK_INTERVAL
+          valueFrom:
+            configMapKeyRef:
+              name: cex-backend-config
+              key: HEALTH_CHECK_INTERVAL
+        
+        # Secret environment variables
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: DATABASE_URL
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: REDIS_URL
+        - name: MONGODB_URL
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: MONGODB_URL
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: JWT_SECRET
+        - name: JWT_REFRESH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: JWT_REFRESH_SECRET
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: ENCRYPTION_KEY
+        - name: GOOGLE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: GOOGLE_CLIENT_ID
+        - name: GOOGLE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: GOOGLE_CLIENT_SECRET
+        - name: APPLE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: APPLE_CLIENT_ID
+        - name: APPLE_TEAM_ID
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: APPLE_TEAM_ID
+        - name: APPLE_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: APPLE_KEY_ID
+        - name: APPLE_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: APPLE_PRIVATE_KEY
+        - name: SENDGRID_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: SENDGRID_API_KEY
+        - name: SENDGRID_FROM_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: SENDGRID_FROM_EMAIL
+        - name: TWILIO_ACCOUNT_SID
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: TWILIO_ACCOUNT_SID
+        - name: TWILIO_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: TWILIO_AUTH_TOKEN
+        - name: TWILIO_PHONE_NUMBER
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: TWILIO_PHONE_NUMBER
+        - name: BITCOIN_RPC_URL
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: BITCOIN_RPC_URL
+        - name: BITCOIN_RPC_USER
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: BITCOIN_RPC_USER
+        - name: BITCOIN_RPC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: BITCOIN_RPC_PASSWORD
+        - name: ETHEREUM_RPC_URL
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: ETHEREUM_RPC_URL
+        - name: ETHEREUM_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: ETHEREUM_PRIVATE_KEY
+        - name: HOT_WALLET_SEED_BTC
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: HOT_WALLET_SEED_BTC
+        - name: HOT_WALLET_SEED_ETH
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: HOT_WALLET_SEED_ETH
+        - name: STRIPE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: STRIPE_SECRET_KEY
+        - name: STRIPE_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: STRIPE_WEBHOOK_SECRET
+        - name: PAYPAL_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: PAYPAL_CLIENT_ID
+        - name: PAYPAL_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: PAYPAL_CLIENT_SECRET
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_S3_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: AWS_S3_BUCKET
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: AWS_REGION
+        - name: COINMARKETCAP_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: COINMARKETCAP_API_KEY
+        - name: COINGECKO_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: COINGECKO_API_KEY
+        - name: SENTRY_DSN
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: SENTRY_DSN
+        - name: BACKUP_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cex-backend-secrets
+              key: BACKUP_ENCRYPTION_KEY
+        
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 3001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+        
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        - name: uploads
+          mountPath: /app/uploads
+        
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: cex-uploads-pvc
+      
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - cex-backend
+              topologyKey: kubernetes.io/hostname
+      
+      tolerations:
+      - key: "node.kubernetes.io/not-ready"
+        operator: "Exists"
+        effect: "NoExecute"
+        tolerationSeconds: 300
+      - key: "node.kubernetes.io/unreachable"
+        operator: "Exists"
+        effect: "NoExecute"
+        tolerationSeconds: 300
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cex-backend
+  namespace: cex-exchange
+  labels:
+    app: cex-backend
+    component: backend
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3001
+    targetPort: 3001
+    protocol: TCP
+    name: http
+  - port: 3002
+    targetPort: 3002
+    protocol: TCP
+    name: websocket
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+    name: metrics
+  selector:
+    app: cex-backend
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cex-backend-sa
+  namespace: cex-exchange
+  labels:
+    app: cex-backend
+    component: backend
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cex-backend-pdb
+  namespace: cex-exchange
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: cex-backend
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: cex-backend-hpa
+  namespace: cex-exchange
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: cex-backend
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Max

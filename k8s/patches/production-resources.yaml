@@ -1,0 +1,170 @@
+# Production resource patches untuk optimasi performa
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cex-backend
+spec:
+  template:
+    spec:
+      containers:
+      - name: backend
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "2Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+        env:
+        - name: NODE_OPTIONS
+          value: "--max-old-space-size=3072"
+        - name: UV_THREADPOOL_SIZE
+          value: "16"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cex-frontend
+spec:
+  template:
+    spec:
+      containers:
+      - name: frontend
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cex-admin
+spec:
+  template:
+    spec:
+      containers:
+      - name: admin
+        resources:
+          requests:
+            cpu: "300m"
+            memory: "512Mi"
+          limits:
+            cpu: "800m"
+            memory: "1Gi"
+        env:
+        - name: PHP_MEMORY_LIMIT
+          value: "768M"
+        - name: PHP_MAX_EXECUTION_TIME
+          value: "300"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgresql
+spec:
+  template:
+    spec:
+      containers:
+      - name: postgresql
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "4Gi"
+          limits:
+            cpu: "2000m"
+            memory: "8Gi"
+        env:
+        - name: POSTGRES_SHARED_BUFFERS
+          value: "2GB"
+        - name: POSTGRES_EFFECTIVE_CACHE_SIZE
+          value: "6GB"
+        - name: POSTGRES_WORK_MEM
+          value: "64MB"
+        - name: POSTGRES_MAINTENANCE_WORK_MEM
+          value: "512MB"
+        - name: POSTGRES_MAX_CONNECTIONS
+          value: "200"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+spec:
+  template:
+    spec:
+      containers:
+      - name: redis
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "2Gi"
+          limits:
+            cpu: "1000m"
+            memory: "4Gi"
+        env:
+        - name: REDIS_MAXMEMORY
+          value: "3gb"
+        - name: REDIS_MAXMEMORY_POLICY
+          value: "allkeys-lru"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+spec:
+  template:
+    spec:
+      containers:
+      - name: mongodb
+        resources:
+          requests:
+            cpu: "800m"
+            memory: "3Gi"
+          limits:
+            cpu: "1500m"
+            memory: "6Gi"
+        env:
+        - name: MONGO_CACHE_SIZE_GB
+          value: "4"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+spec:
+  template:
+    spec:
+      containers:
+      - name: prometheus
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "2Gi"
+          limits:
+            cpu: "1000m"
+            memory: "4Gi"
+        args:
+        - --storage.tsdb.retention.time=30d
+        - --storage.tsdb.retention.size=50GB
+        - --query.max-concurrency=20
+        - --query.max-samples=50000000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+spec:
+  template:
+    spec:
+      containers:
+      - name: grafana
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            cpu: "500m"
+            memory: "1Gi"

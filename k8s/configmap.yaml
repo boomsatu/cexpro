@@ -1,0 +1,342 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cex-backend-config
+  namespace: cex-exchange
+data:
+  NODE_ENV: "production"
+  PORT: "3001"
+  API_VERSION: "v1"
+  CORS_ORIGIN: "https://cexexchange.com"
+  RATE_LIMIT_WINDOW_MS: "900000"
+  RATE_LIMIT_MAX_REQUESTS: "100"
+  SESSION_TIMEOUT: "86400"
+  MAX_LOGIN_ATTEMPTS: "5"
+  LOCKOUT_DURATION: "1800"
+  PASSWORD_MIN_LENGTH: "8"
+  EMAIL_VERIFICATION_REQUIRED: "true"
+  TWO_FACTOR_REQUIRED: "false"
+  KYC_REQUIRED: "true"
+  TRADING_ENABLED: "true"
+  DEPOSITS_ENABLED: "true"
+  WITHDRAWALS_ENABLED: "true"
+  MAINTENANCE_MODE: "false"
+  LOG_LEVEL: "info"
+  WEBSOCKET_PORT: "3002"
+  WEBSOCKET_MAX_CONNECTIONS: "10000"
+  CACHE_TTL: "300"
+  FILE_UPLOAD_MAX_SIZE: "10485760"
+  BACKUP_ENABLED: "true"
+  BACKUP_SCHEDULE: "0 2 * * *"
+  MONITORING_ENABLED: "true"
+  METRICS_PORT: "9090"
+  HEALTH_CHECK_INTERVAL: "30"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cex-frontend-config
+  namespace: cex-exchange
+data:
+  REACT_APP_API_URL: "https://api.cexexchange.com"
+  REACT_APP_WS_URL: "wss://ws.cexexchange.com"
+  REACT_APP_ENVIRONMENT: "production"
+  REACT_APP_VERSION: "1.0.0"
+  REACT_APP_SENTRY_DSN: ""
+  REACT_APP_GOOGLE_ANALYTICS_ID: ""
+  REACT_APP_RECAPTCHA_SITE_KEY: ""
+  REACT_APP_STRIPE_PUBLISHABLE_KEY: ""
+  REACT_APP_PAYPAL_CLIENT_ID: ""
+  REACT_APP_SUPPORT_EMAIL: "support@cexexchange.com"
+  REACT_APP_COMPANY_NAME: "CEX Exchange"
+  REACT_APP_TERMS_URL: "https://cexexchange.com/terms"
+  REACT_APP_PRIVACY_URL: "https://cexexchange.com/privacy"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cex-admin-config
+  namespace: cex-exchange
+data:
+  CI_ENVIRONMENT: "production"
+  BASE_URL: "https://admin.cexexchange.com"
+  INDEX_PAGE: "dashboard"
+  URI_PROTOCOL: "REQUEST_URI"
+  URL_SUFFIX: ""
+  LANGUAGE: "english"
+  CHARSET: "UTF-8"
+  ENABLE_HOOKS: "TRUE"
+  SUBCLASS_PREFIX: "MY_"
+  COMPOSER_AUTOLOAD: "TRUE"
+  PERMITTED_URI_CHARS: "a-z 0-9~%.:_\-"
+  ALLOW_GET_ARRAY: "TRUE"
+  ENABLE_QUERY_STRINGS: "FALSE"
+  CONTROLLER_TRIGGER: "c"
+  FUNCTION_TRIGGER: "m"
+  DIRECTORY_TRIGGER: "d"
+  LOG_THRESHOLD: "1"
+  LOG_DATE_FORMAT: "Y-m-d H:i:s"
+  ERROR_VIEWS_PATH: ""
+  CACHE_PATH: ""
+  CACHE_DEFAULT_EXPIRES: "0"
+  ENCRYPTION_KEY: ""
+  SESS_DRIVER: "redis"
+  SESS_COOKIE_NAME: "ci_session"
+  SESS_EXPIRATION: "7200"
+  SESS_SAVE_PATH: "tcp://redis:6379"
+  SESS_MATCH_IP: "FALSE"
+  SESS_TIME_TO_UPDATE: "300"
+  SESS_REGENERATE_DESTROY: "FALSE"
+  COOKIE_PREFIX: ""
+  COOKIE_DOMAIN: ".cexexchange.com"
+  COOKIE_PATH: "/"
+  COOKIE_SECURE: "TRUE"
+  COOKIE_HTTPONLY: "TRUE"
+  COOKIE_SAMESITE: "Lax"
+  STANDARDIZE_NEWLINES: "FALSE"
+  GLOBAL_XSS_FILTERING: "TRUE"
+  CSRF_PROTECTION: "TRUE"
+  CSRF_TOKEN_NAME: "csrf_token_name"
+  CSRF_COOKIE_NAME: "csrf_cookie_name"
+  CSRF_EXPIRE: "7200"
+  CSRF_REGENERATE: "TRUE"
+  CSRF_EXCLUDE_URIS: ""
+  COMPRESS_OUTPUT: "TRUE"
+  TIME_REFERENCE: "utc"
+  REWRITE_SHORT_TAGS: "FALSE"
+  PROXY_IPS: ""
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: cex-exchange
+data:
+  POSTGRES_DB: "cex_db"
+  POSTGRES_USER: "cex_user"
+  PGDATA: "/var/lib/postgresql/data/pgdata"
+  POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: cex-exchange
+data:
+  redis.conf: |
+    # Redis configuration for CEX Exchange
+    bind 0.0.0.0
+    port 6379
+    timeout 0
+    tcp-keepalive 300
+    
+    # Memory management
+    maxmemory 2gb
+    maxmemory-policy allkeys-lru
+    
+    # Persistence
+    save 900 1
+    save 300 10
+    save 60 10000
+    
+    # Security
+    requirepass ${REDIS_PASSWORD}
+    
+    # Logging
+    loglevel notice
+    logfile ""
+    
+    # Client output buffer limits
+    client-output-buffer-limit normal 0 0 0
+    client-output-buffer-limit replica 256mb 64mb 60
+    client-output-buffer-limit pubsub 32mb 8mb 60
+    
+    # Slow log
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+    
+    # Latency monitoring
+    latency-monitor-threshold 100
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodb-config
+  namespace: cex-exchange
+data:
+  mongod.conf: |
+    # MongoDB configuration for CEX Exchange
+    storage:
+      dbPath: /data/db
+      journal:
+        enabled: true
+      wiredTiger:
+        engineConfig:
+          cacheSizeGB: 2
+    
+    systemLog:
+      destination: file
+      logAppend: true
+      path: /var/log/mongodb/mongod.log
+      logRotate: reopen
+    
+    net:
+      port: 27017
+      bindIp: 0.0.0.0
+    
+    processManagement:
+      timeZoneInfo: /usr/share/zoneinfo
+    
+    security:
+      authorization: enabled
+    
+    replication:
+      replSetName: "cex-replica-set"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: cex-exchange
+data:
+  nginx.conf: |
+    user nginx;
+    worker_processes auto;
+    error_log /var/log/nginx/error.log warn;
+    pid /var/run/nginx.pid;
+    
+    events {
+        worker_connections 1024;
+        use epoll;
+        multi_accept on;
+    }
+    
+    http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+        
+        # Logging
+        log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for"';
+        
+        access_log /var/log/nginx/access.log main;
+        
+        # Performance
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        keepalive_timeout 65;
+        types_hash_max_size 2048;
+        client_max_body_size 10M;
+        
+        # Gzip compression
+        gzip on;
+        gzip_vary on;
+        gzip_min_length 1024;
+        gzip_types text/plain text/css text/xml text/javascript application/javascript application/xml+rss application/json;
+        
+        # Security headers
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "no-referrer-when-downgrade" always;
+        add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        
+        # Rate limiting
+        limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+        limit_req_zone $binary_remote_addr zone=login:10m rate=1r/s;
+        
+        # Upstream servers
+        upstream backend {
+            least_conn;
+            server cex-backend:3001 max_fails=3 fail_timeout=30s;
+        }
+        
+        upstream frontend {
+            least_conn;
+            server cex-frontend:3000 max_fails=3 fail_timeout=30s;
+        }
+        
+        upstream admin {
+            least_conn;
+            server cex-admin:80 max_fails=3 fail_timeout=30s;
+        }
+        
+        # Main server block
+        server {
+            listen 80;
+            server_name cexexchange.com www.cexexchange.com;
+            return 301 https://$server_name$request_uri;
+        }
+        
+        server {
+            listen 443 ssl http2;
+            server_name cexexchange.com www.cexexchange.com;
+            
+            # SSL configuration
+            ssl_certificate /etc/nginx/ssl/cert.pem;
+            ssl_certificate_key /etc/nginx/ssl/key.pem;
+            ssl_protocols TLSv1.2 TLSv1.3;
+            ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
+            ssl_prefer_server_ciphers off;
+            ssl_session_cache shared:SSL:10m;
+            ssl_session_timeout 10m;
+            
+            # Frontend
+            location / {
+                proxy_pass http://frontend;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+            
+            # API
+            location /api/ {
+                limit_req zone=api burst=20 nodelay;
+                proxy_pass http://backend;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+            
+            # WebSocket
+            location /ws/ {
+                proxy_pass http://backend;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+        }
+        
+        # Admin panel
+        server {
+            listen 443 ssl http2;
+            server_name admin.cexexchange.com;
+            
+            # SSL configuration
+            ssl_certificate /etc/nginx/ssl/cert.pem;
+            ssl_certificate_key /etc/nginx/ssl/key.pem;
+            ssl_protocols TLSv1.2 TLSv1.3;
+            ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
+            ssl_prefer_server_ciphers off;
+            ssl_session_cache shared:SSL:10m;
+            ssl_session_timeout 10m;
+            
+            location / {
+                limit_req zone=login burst=5 nodelay;
+                proxy_pass http://admin;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+        }
+    }

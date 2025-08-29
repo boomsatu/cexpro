@@ -1,0 +1,272 @@
+# Kustomization file untuk CEX Exchange Kubernetes deployment
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Metadata
+metadata:
+  name: cex-exchange
+  annotations:
+    config.kubernetes.io/local-config: "true"
+
+# Namespace untuk semua resources
+namespace: cex-exchange
+
+# Common labels yang akan diterapkan ke semua resources
+commonLabels:
+  app.kubernetes.io/name: cex-exchange
+  app.kubernetes.io/version: "1.0.0"
+  app.kubernetes.io/component: exchange-platform
+  app.kubernetes.io/part-of: cex-trading-system
+  app.kubernetes.io/managed-by: kustomize
+  environment: production
+
+# Common annotations
+commonAnnotations:
+  deployment.kubernetes.io/revision: "1"
+  kubernetes.io/managed-by: kustomize
+  contact: "devops@cexexchange.com"
+  documentation: "https://docs.cexexchange.com/k8s"
+
+# Resources yang akan di-deploy
+resources:
+  # Namespace dan basic configuration
+  - namespace.yaml
+  - configmap.yaml
+  - secrets.yaml
+  
+  # Storage dan networking
+  - storage.yaml
+  - ingress.yaml
+  
+  # Database deployments
+  - database-deployment.yaml
+  
+  # Application deployments
+  - backend-deployment.yaml
+  - frontend-deployment.yaml
+  - admin-deployment.yaml
+  
+  # Monitoring dan logging
+  - monitoring.yaml
+  - logging.yaml
+  
+  # Security dan backup
+  - security.yaml
+  - backup.yaml
+
+# ConfigMap generators untuk environment-specific configs
+configMapGenerator:
+  - name: app-config
+    literals:
+      - APP_ENV=production
+      - LOG_LEVEL=info
+      - DEBUG=false
+      - NODE_ENV=production
+      - REDIS_CLUSTER_MODE=true
+      - MONGODB_REPLICA_SET=true
+      - KAFKA_CLUSTER_MODE=true
+      - ENABLE_METRICS=true
+      - ENABLE_TRACING=true
+      - BACKUP_ENABLED=true
+      - SECURITY_SCAN_ENABLED=true
+
+  - name: feature-flags
+    literals:
+      - TRADING_ENABLED=true
+      - DEPOSIT_ENABLED=true
+      - WITHDRAWAL_ENABLED=true
+      - KYC_REQUIRED=true
+      - TWO_FA_REQUIRED=true
+      - API_RATE_LIMITING=true
+      - MAINTENANCE_MODE=false
+      - NEW_USER_REGISTRATION=true
+
+# Secret generators
+secretGenerator:
+  - name: app-secrets
+    type: Opaque
+    literals:
+      - JWT_SECRET=change-this-in-production
+      - ENCRYPTION_KEY=change-this-in-production
+      - API_SECRET_KEY=change-this-in-production
+
+# Images yang akan digunakan
+images:
+  - name: cex-backend
+    newName: ghcr.io/cexexchange/backend
+    newTag: v1.0.0
+  - name: cex-frontend
+    newName: ghcr.io/cexexchange/frontend
+    newTag: v1.0.0
+  - name: cex-admin
+    newName: ghcr.io/cexexchange/admin
+    newTag: v1.0.0
+
+# Patches untuk customization
+patchesStrategicMerge:
+  # Production-specific patches
+  - patches/production-resources.yaml
+  - patches/production-replicas.yaml
+
+# JSON patches untuk fine-grained modifications
+patchesJson6902:
+  # Patch untuk menambahkan production-specific annotations
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: cex-backend
+    patch: |
+      - op: add
+        path: /metadata/annotations/deployment.kubernetes.io~1config.source
+        value: kustomize-production
+      - op: add
+        path: /spec/template/metadata/annotations/prometheus.io~1scrape
+        value: "true"
+      - op: add
+        path: /spec/template/metadata/annotations/prometheus.io~1port
+        value: "3000"
+
+# Replacements untuk dynamic values
+replacements:
+  - source:
+      kind: ConfigMap
+      name: app-config
+      fieldPath: data.APP_ENV
+    targets:
+      - select:
+          kind: Deployment
+        fieldPaths:
+          - spec.template.spec.containers.[name=backend].env.[name=NODE_ENV].value
+          - spec.template.spec.containers.[name=frontend].env.[name=NODE_ENV].value
+          - spec.template.spec.containers.[name=admin].env.[name=NODE_ENV].value
+
+# Replicas untuk production
+replicas:
+  - name: cex-backend
+    count: 3
+  - name: cex-frontend
+    count: 2
+  - name: cex-admin
+    count: 2
+  - name: prometheus
+    count: 1
+  - name: grafana
+    count: 1
+
+# Generators untuk additional resources
+generators:
+  # Generator untuk monitoring dashboards
+  - monitoring-dashboards.yaml
+  # Generator untuk backup policies
+  - backup-policies.yaml
+
+# Build metadata
+buildMetadata:
+  - buildDate
+  - buildUser
+  - buildHost
+
+# Validation
+validations:
+  - resources/validation-rules.yaml
+
+---
+# Kustomization untuk staging environment
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: cex-exchange-staging
+
+namespace: cex-exchange-staging
+
+commonLabels:
+  app.kubernetes.io/name: cex-exchange
+  app.kubernetes.io/version: "1.0.0-staging"
+  app.kubernetes.io/component: exchange-platform
+  app.kubernetes.io/part-of: cex-trading-system
+  app.kubernetes.io/managed-by: kustomize
+  environment: staging
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secrets.yaml
+  - storage.yaml
+  - ingress.yaml
+  - database-deployment.yaml
+  - backend-deployment.yaml
+  - frontend-deployment.yaml
+  - admin-deployment.yaml
+  - monitoring.yaml
+  - logging.yaml
+  - security.yaml
+
+configMapGenerator:
+  - name: app-config
+    literals:
+      - APP_ENV=staging
+      - LOG_LEVEL=debug
+      - DEBUG=true
+      - NODE_ENV=staging
+      - REDIS_CLUSTER_MODE=false
+      - MONGODB_REPLICA_SET=false
+      - KAFKA_CLUSTER_MODE=false
+      - ENABLE_METRICS=true
+      - ENABLE_TRACING=true
+      - BACKUP_ENABLED=false
+      - SECURITY_SCAN_ENABLED=false
+
+  - name: feature-flags
+    literals:
+      - TRADING_ENABLED=true
+      - DEPOSIT_ENABLED=true
+      - WITHDRAWAL_ENABLED=false
+      - KYC_REQUIRED=false
+      - TWO_FA_REQUIRED=false
+      - API_RATE_LIMITING=false
+      - MAINTENANCE_MODE=false
+      - NEW_USER_REGISTRATION=true
+
+images:
+  - name: cex-backend
+    newName: ghcr.io/cexexchange/backend
+    newTag: staging
+  - name: cex-frontend
+    newName: ghcr.io/cexexchange/frontend
+    newTag: staging
+  - name: cex-admin
+    newName: ghcr.io/cexexchange/admin
+    newTag: staging
+
+patchesStrategicMerge:
+  - patches/staging-resources.yaml
+  - patches/staging-replicas.yaml
+
+replicas:
+  - name: cex-backend
+    count: 1
+  - name: cex-frontend
+    count: 1
+  - name: cex-admin
+    count: 1
+  - name: prometheus
+    count: 1
+  - name: grafana
+    count: 1
+
+# Staging-specific patches
+patchesJson6902:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: cex-backend
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "256Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "512Mi"
