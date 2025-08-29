@@ -28,29 +28,32 @@ const getUsers = async (req, res) => {
       whereClause[Op.or] = [
         { username: { [Op.iLike]: `%${search}%` } },
         { email: { [Op.iLike]: `%${search}%` } },
-        { full_name: { [Op.iLike]: `%${search}%` } }
+        { firstName: { [Op.iLike]: `%${search}%` } },
+        { lastName: { [Op.iLike]: `%${search}%` } }
       ];
     }
 
-    // Status filter
+    // Status filter (matches User.status enum)
     if (status) {
-      whereClause.is_active = status === 'active';
+      whereClause.status = status;
     }
 
-    // KYC status filter
-    // Temporarily remove all includes to debug
+    // Build includes if KYC filter requested
     const includeOptions = [];
-    
-    console.log('🔍 Testing with no includes to isolate the issue');
 
     if (kyc_status) {
-      includeOptions[1].where = { status: kyc_status };
-      includeOptions[1].required = true;
+      includeOptions.push({
+        model: KYC,
+        as: 'kycDocuments',
+        where: { status: kyc_status },
+        required: true,
+        attributes: ['id', 'status', 'document_type', 'submitted_at', 'verified_at']
+      });
     }
 
     console.log('🔍 About to execute User.findAndCountAll...');
     console.log('📊 Include options:', JSON.stringify(includeOptions, null, 2));
-    
+
     const { count, rows: users } = await User.findAndCountAll({
       where: whereClause,
       include: includeOptions,
@@ -58,17 +61,17 @@ const getUsers = async (req, res) => {
       offset,
       order: [[sort_by, sort_order.toUpperCase()]],
       attributes: {
-        exclude: ['password', 'two_factor_secret']
+        exclude: ['password', 'twoFactorSecret']
       }
     });
-    
+
     console.log('✅ User.findAndCountAll completed successfully');
 
     // Calculate additional statistics for each user
     const usersWithStats = await Promise.all(
       users.map(async (user) => {
         const userObj = user.toJSON();
-        
+
         // Get transaction count and volume
         const transactionStats = await Transaction.findAll({
           where: { user_id: user.id },
@@ -123,21 +126,24 @@ const getUserById = async (req, res) => {
       include: [
         {
           model: Wallet,
-          attributes: ['id', 'currency', 'balance', 'frozen_balance', 'created_at']
+          as: 'wallets',
+          attributes: ['id', 'currency', 'balance', 'pending_balance', 'status', 'created_at']
         },
         {
           model: KYC,
+          as: 'kycDocuments',
           attributes: ['id', 'status', 'level', 'document_type', 'submitted_at', 'verified_at', 'rejection_reason']
         },
         {
           model: Transaction,
+          as: 'transactions',
           limit: 10,
           order: [['created_at', 'DESC']],
-          attributes: ['id', 'type', 'amount', 'status', 'created_at', 'description']
+          attributes: ['id', 'type', 'amount', 'status', 'created_at']
         }
       ],
       attributes: {
-        exclude: ['password', 'two_factor_secret']
+        exclude: ['password', 'twoFactorSecret']
       }
     });
 

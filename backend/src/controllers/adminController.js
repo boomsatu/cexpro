@@ -44,7 +44,7 @@ const login = async (req, res) => {
     // Generate JWT token
     const token = generateAdminToken(result.admin);
 
-    logger.info(`Admin login successful: ${result.admin.username}`, {
+    logger.info(`Admin login successful: ${result.admin.email}`, {
       admin_id: result.admin.id,
       ip: req.ip,
       user_agent: req.get('User-Agent')
@@ -75,7 +75,7 @@ const login = async (req, res) => {
 const getProfile = async (req, res) => {
   try {
     const admin = await Admin.findByPk(req.admin.id, {
-      attributes: ['id', 'username', 'email', 'full_name', 'role', 'is_active', 'last_login', 'created_at']
+      attributes: ['id', 'email', 'name', 'role', 'status', 'last_login', 'created_at']
     });
 
     if (!admin) {
@@ -114,7 +114,7 @@ const updateProfile = async (req, res) => {
       });
     }
 
-    const { full_name, email } = req.body;
+    const { name, email } = req.body;
     const admin = await Admin.findByPk(req.admin.id);
 
     if (!admin) {
@@ -145,17 +145,17 @@ const updateProfile = async (req, res) => {
 
     // Update admin
     await admin.update({
-      full_name: full_name || admin.full_name,
+      name: name || admin.name,
       email: email || admin.email
     });
 
     const updatedAdmin = await Admin.findByPk(admin.id, {
-      attributes: ['id', 'username', 'email', 'full_name', 'role', 'is_active', 'last_login', 'created_at']
+      attributes: ['id', 'email', 'name', 'role', 'status', 'last_login', 'created_at']
     });
 
-    logger.info(`Admin profile updated: ${admin.username}`, {
+    logger.info(`Admin profile updated: ${admin.email}`, {
       admin_id: admin.id,
-      changes: { full_name, email }
+      changes: { name, email }
     });
 
     res.json({
@@ -216,7 +216,7 @@ const changePassword = async (req, res) => {
     // Update password
     await admin.update({ password: hashedPassword });
 
-    logger.info(`Admin password changed: ${admin.username}`, {
+    logger.info(`Admin password changed: ${admin.email}`, {
       admin_id: admin.id
     });
 
